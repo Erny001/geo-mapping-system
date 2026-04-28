@@ -63,6 +63,7 @@ function renderMap(type, data, projectName) {
 <head>
 <meta charset="utf-8"/>
 <title>${type === "map2" ? "MAP 2 — Sample Location Map" : "MAP 3 — Geological Map"} | ${projectName}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #e8e8e8; font-family: "Times New Roman", serif; }
@@ -82,9 +83,10 @@ function renderMap(type, data, projectName) {
 </head>
 <body>
 <div class="controls">
-  <button onclick="window.print()">🖨 Print / Save PDF</button>
-  <button onclick="downloadPNG()">⬇ Download PNG</button>
-  <span>Print: set paper to A4 Landscape, margins to None</span>
+  <button onclick="download300PNG()">⬇ PNG 300dpi</button>
+  <button onclick="downloadPDF()">⬇ PDF A3</button>
+  <button onclick="window.print()">🖨 Print</button>
+  <span>PNG = 300dpi high-res · PDF = A3 print-ready · Print = browser dialog</span>
 </div>
 <div class="page">
   <canvas id="mapCanvas" width="${W}" height="${H}"></canvas>
@@ -414,14 +416,81 @@ function init(){
   });
 }
 
+function getFilename(ext){
+  return (mapType==="map2"?"MAP2_":"MAP3_")+(projectName||"geomap").replace(/\s+/g,"_")+"."+ext;
+}
+
+// ── SCREEN-RES PNG (quick) ──
 function downloadPNG(){
   var a=document.createElement("a");
-  a.download=(mapType==="map2"?"MAP2_":"MAP3_")+(projectName||"geomap").replace(/\\s+/g,"_")+".png";
+  a.download=getFilename("png");
   a.href=canvas.toDataURL("image/png");
   a.click();
 }
 
+// ── 300dpi HIGH-RES PNG ──
+function download300PNG(){
+  var SCALE=3.125; // 96dpi × 3.125 = 300dpi
+  var hiW=Math.round(W*SCALE), hiH=Math.round(H*SCALE);
+  var hiCanvas=document.createElement("canvas");
+  hiCanvas.width=hiW; hiCanvas.height=hiH;
+  var hiCtx=hiCanvas.getContext("2d");
+
+  // Scale everything up
+  hiCtx.scale(SCALE,SCALE);
+
+  // Re-draw onto hi-res canvas
+  // White background
+  hiCtx.fillStyle="#ffffff"; hiCtx.fillRect(0,0,W,H);
+
+  // Tiles
+  var cx2=lon2tile(center.lon,zoom), cy2=lat2tile(center.lat,zoom);
+  var range=Math.ceil(Math.max(MAP_W,MAP_H)/TILE_SIZE/2)+2;
+  for(var tx=cx2-range;tx<=cx2+range;tx++){
+    for(var ty=cy2-range;ty<=cy2+range;ty++){
+      var max=Math.pow(2,zoom);
+      if(ty<0||ty>=max)continue;
+      var ox=tx, rx=((tx%max)+max)%max;
+      var img=tileCache[zoom+"/"+rx+"/"+ty];
+      var pt=ll2px(tile2lat(ty,zoom),tile2lon(ox,zoom));
+      if(img){hiCtx.globalAlpha=mapType==="map3"?0.35:0.65;hiCtx.drawImage(img,Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);hiCtx.globalAlpha=1;}
+    }
+  }
+
+  // Copy the screen canvas on top (all vector elements already drawn)
+  hiCtx.drawImage(canvas,0,0,W,H);
+
+  // Export
+  hiCanvas.toBlob(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.download=getFilename("png");
+    a.href=url; a.click();
+    setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  },"image/png");
+}
+
+// ── PDF A3 ──
+function downloadPDF(){
+  if(!window.jspdf){
+    alert("PDF library not loaded yet. Please wait a moment and try again.");
+    return;
+  }
+  var doc=new window.jspdf.jsPDF({
+    orientation:"portrait",
+    unit:"mm",
+    format:"a3"
+  });
+  // A3 = 297 × 420mm
+  var pdfW=297, pdfH=420;
+  var imgData=canvas.toDataURL("image/png",1.0);
+  doc.addImage(imgData,"PNG",0,0,pdfW,pdfH);
+  doc.save(getFilename("pdf"));
+}
+
 window.downloadPNG=downloadPNG;
+window.download300PNG=download300PNG;
+window.downloadPDF=downloadPDF;
 init();
 <\/script>
 </body>
@@ -703,6 +772,21 @@ export default function GeoMappingSystem() {
     w.document.close();
   },[towns,roads,rivers,samples,geoZones,center,zoom,projectName]);
 
+  var openMapExport = useCallback(function(type, fmt){
+    var data={towns,roads,rivers,samples,geoZones,center,zoom};
+    var html=renderMap(type,data,projectName||"Study Area");
+    var w=window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+    // Trigger export after map renders and tiles load
+    w.addEventListener("load", function(){
+      setTimeout(function(){
+        if(fmt==="png") w.download300PNG && w.download300PNG();
+        if(fmt==="pdf") w.downloadPDF && w.downloadPDF();
+      }, 3000);
+    });
+  },[towns,roads,rivers,samples,geoZones,center,zoom,projectName]);
+
   var totalNodes=roads.reduce(function(s,r){return s+r.points.length;},0)+rivers.reduce(function(s,r){return s+r.points.length;},0);
   var btnBase={border:"none",borderRadius:6,cursor:"pointer",fontFamily:"sans-serif",fontWeight:"bold"};
 
@@ -915,9 +999,23 @@ export default function GeoMappingSystem() {
                     📄 Generate MAP 2<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>Sample Location Map</span>
                   </button>
                   <button onClick={function(){openMap("map3");}}
-                    style={Object.assign({},btnBase,{width:"100%",background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"9px",fontSize:11})}>
+                    style={Object.assign({},btnBase,{width:"100%",background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"9px",fontSize:11,marginBottom:12})}>
                     🪨 Generate MAP 3<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>Geological Map</span>
                   </button>
+                  <div style={{fontSize:10,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>QUICK EXPORT</div>
+                  {[
+                    {label:"⬇ MAP 2 — PNG 300dpi", type:"map2", fmt:"png"},
+                    {label:"⬇ MAP 2 — PDF A3",     type:"map2", fmt:"pdf"},
+                    {label:"⬇ MAP 3 — PNG 300dpi", type:"map3", fmt:"png"},
+                    {label:"⬇ MAP 3 — PDF A3",     type:"map3", fmt:"pdf"},
+                  ].map(function(item,i){
+                    return(
+                      <button key={i} onClick={function(){openMapExport(item.type, item.fmt);}}
+                        style={Object.assign({},btnBase,{width:"100%",background:"#0f1f2f",color:"#7ab",border:"1px solid #2a4a6a",padding:"7px",fontSize:10,marginBottom:4})}>
+                        {item.label}
+                      </button>
+                    );
+                  })}
                 </div>
                 <div style={{background:"#0f0f1e",border:"1px dashed #2a2a4a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>OUTPUT INCLUDES</div>
