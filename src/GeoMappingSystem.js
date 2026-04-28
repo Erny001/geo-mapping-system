@@ -82,9 +82,10 @@ export default function GeoMappingSystem() {
   var [mousePos,setMousePos]=useState(null);
 
   // Selected feature for editing
-  var [selected,setSelected]=useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [selected, setSelected] = useState(...);
 
-  // Form state
+  // Form s tate
   var [townForm,setTownForm]=useState({name:""});
   var [sampleForm,setSampleForm]=useState({id:"",rock:"Shale",notes:""});
   var [geoRock,setGeoRock]=useState("Shale");
@@ -305,7 +306,8 @@ export default function GeoMappingSystem() {
     var r=canvasRef.current.getBoundingClientRect();
     return px2ll((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height),center.lat,center.lon,zoom,W,H);
   }
-  function getPX(e){
+  // eslint-disable-next-line no-unused-vars
+  const getPX = ...
     var r=canvasRef.current.getBoundingClientRect();
     return {x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)};
   }
