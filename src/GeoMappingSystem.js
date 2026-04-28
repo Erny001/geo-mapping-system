@@ -46,8 +46,8 @@ function dist(p1,p2){return Math.sqrt(Math.pow(p1.x-p2.x,2)+Math.pow(p1.y-p2.y,2
 // ── MAP OUTPUT RENDERER ────────────────────────────────────────────────────
 function renderMap(type, data, projectName) {
   // type: "map2" | "map3"
-  const W = 1587, H = 1123; // A3 landscape at 96dpi (420x297mm)
-  const MARGIN = { top: 70, left: 70, right: 220, bottom: 60 };
+  const W = 1123, H = 1587; // A3 portrait at 96dpi (297x420mm)
+  const MARGIN = { top: 70, left: 60, right: 60, bottom: 220 };
   const MAP_W = W - MARGIN.left - MARGIN.right;
   const MAP_H = H - MARGIN.top - MARGIN.bottom;
 
@@ -76,7 +76,7 @@ function renderMap(type, data, projectName) {
     body { background: #fff; }
     .controls { display: none; }
     .page { margin: 0; box-shadow: none; }
-    @page { size: A3 landscape; margin: 0; }
+    @page { size: A3 portrait; margin: 0; }
   }
 </style>
 </head>
@@ -268,115 +268,126 @@ function drawAll(){
   }
   ctx.setLineDash([]); ctx.restore();
 
-  // ── NORTH ARROW ──
-  var ax=MARGIN.left+MAP_W+95, ay=MARGIN.top+60;
+  // ── MAIN TITLE (top, centered over map) ──
   ctx.save();
-  ctx.fillStyle="#fff"; ctx.strokeStyle="#000"; ctx.lineWidth=1;
-  ctx.beginPath();ctx.arc(ax,ay,22,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.fillStyle="#000";
-  ctx.beginPath();ctx.moveTo(ax,ay-18);ctx.lineTo(ax-7,ay+4);ctx.lineTo(ax+7,ay+4);ctx.closePath();ctx.fill();
-  ctx.fillStyle="#fff";
-  ctx.beginPath();ctx.moveTo(ax,ay+18);ctx.lineTo(ax-7,ay-4);ctx.lineTo(ax+7,ay-4);ctx.closePath();ctx.fill();
-  ctx.strokeStyle="#000"; ctx.lineWidth=0.8;
-  ctx.beginPath();ctx.moveTo(ax,ay+18);ctx.lineTo(ax-7,ay-4);ctx.lineTo(ax+7,ay-4);ctx.closePath();ctx.stroke();
-  ctx.fillStyle="#000"; ctx.font="bold 12px Times New Roman"; ctx.textAlign="center";
-  ctx.fillText("N",ax,ay-22); ctx.textAlign="left"; ctx.restore();
+  ctx.font="bold 16px Times New Roman"; ctx.fillStyle="#000"; ctx.textAlign="center";
+  var mainTitle=mapType==="map2"?"MAP 2: SAMPLE LOCATION MAP":"MAP 3: GEOLOGIC MAP";
+  ctx.fillText(mainTitle, MARGIN.left+MAP_W/2, MARGIN.top-30);
+  ctx.font="11px Times New Roman";
+  ctx.fillText("OF "+(projectName||"STUDY AREA").toUpperCase(), MARGIN.left+MAP_W/2, MARGIN.top-14);
+  ctx.textAlign="left"; ctx.restore();
 
-  // ── SCALE BAR ──
-  var mpp=(156543.03392*Math.cos(center.lat*Math.PI/180))/Math.pow(2,zoom);
-  var bm=zoom>=12?500:zoom>=10?2000:zoom>=8?20000:zoom>=6?100000:500000;
-  var bp=bm/mpp;
-  var sx=MARGIN.left+MAP_W+20, sy=MARGIN.top+110;
+  // ── BOTTOM PANEL DIVIDER ──
+  var BY = MARGIN.top+MAP_H+10; // top of bottom panel
   ctx.save();
-  ctx.font="bold 8px Times New Roman"; ctx.fillStyle="#000";
-  ctx.fillText("SCALE",sx,sy-14);
-  ctx.fillStyle="#000"; ctx.fillRect(sx,sy-8,bp/2,8);
-  ctx.fillStyle="#fff"; ctx.fillRect(sx+bp/2,sy-8,bp/2,8);
-  ctx.strokeStyle="#000"; ctx.lineWidth=1; ctx.strokeRect(sx,sy-8,bp,8);
-  ctx.font="7px Times New Roman";
-  ctx.fillStyle="#000";
-  ctx.fillText("0",sx-2,sy+10);
-  ctx.fillText(bm>=1000?bm/1000+" km":bm+" m",sx+bp-6,sy+10);
+  ctx.strokeStyle="#000"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(MARGIN.left, BY); ctx.lineTo(W-MARGIN.right, BY); ctx.stroke();
   ctx.restore();
 
-  // ── LEGEND ──
-  var lx=MARGIN.left+MAP_W+14, ly2=MARGIN.top+150;
+  // ── NORTH ARROW (bottom panel, left zone) ──
+  var ax=MARGIN.left+60, ay=BY+60;
   ctx.save();
-  ctx.font="bold 9px Times New Roman"; ctx.fillStyle="#000";
-  ctx.fillText("LEGEND",lx,ly2); ly2+=14;
-  ctx.lineWidth=0.5; ctx.strokeStyle="#000";
-  ctx.beginPath();ctx.moveTo(lx,ly2);ctx.lineTo(lx+160,ly2);ctx.stroke(); ly2+=8;
+  ctx.fillStyle="#fff"; ctx.strokeStyle="#000"; ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.arc(ax,ay,28,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.fillStyle="#000";
+  ctx.beginPath();ctx.moveTo(ax,ay-22);ctx.lineTo(ax-9,ay+5);ctx.lineTo(ax+9,ay+5);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#fff";
+  ctx.beginPath();ctx.moveTo(ax,ay+22);ctx.lineTo(ax-9,ay-5);ctx.lineTo(ax+9,ay-5);ctx.closePath();ctx.fill();
+  ctx.strokeStyle="#000"; ctx.lineWidth=0.8;
+  ctx.beginPath();ctx.moveTo(ax,ay+22);ctx.lineTo(ax-9,ay-5);ctx.lineTo(ax+9,ay-5);ctx.closePath();ctx.stroke();
+  ctx.fillStyle="#000"; ctx.font="bold 15px Times New Roman"; ctx.textAlign="center";
+  ctx.fillText("N",ax,ay-27); ctx.textAlign="left"; ctx.restore();
 
-  // towns
-  ctx.fillStyle="#000"; ctx.beginPath();ctx.arc(lx+6,ly2,4,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#fff"; ctx.beginPath();ctx.arc(lx+6,ly2,2.5,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#000"; ctx.font="8px Times New Roman";
-  ctx.fillText("Town",lx+14,ly2+3); ly2+=14;
+  // ── SCALE BAR (bottom panel, left zone below north arrow) ──
+  var mpp=(156543.03392*Math.cos(center.lat*Math.PI/180))/Math.pow(2,zoom);
+  var bm=zoom>=12?500:zoom>=10?2000:zoom>=8?20000:zoom>=6?100000:500000;
+  var bp=Math.min(bm/mpp, 180);
+  var sx=MARGIN.left+20, sy=BY+115;
+  ctx.save();
+  ctx.font="bold 10px Times New Roman"; ctx.fillStyle="#000";
+  ctx.fillText("SCALE", sx, sy-16);
+  ctx.fillStyle="#000"; ctx.fillRect(sx,sy-10,bp/2,10);
+  ctx.fillStyle="#fff"; ctx.fillRect(sx+bp/2,sy-10,bp/2,10);
+  ctx.strokeStyle="#000"; ctx.lineWidth=1; ctx.strokeRect(sx,sy-10,bp,10);
+  ctx.font="9px Times New Roman"; ctx.fillStyle="#000";
+  ctx.fillText("0",sx-2,sy+12);
+  ctx.fillText(bm>=1000?bm/1000+" km":bm+" m",sx+bp-10,sy+12);
+  ctx.restore();
 
-  // major road
-  ctx.strokeStyle="#c0392b"; ctx.lineWidth=2.5;
-  ctx.beginPath();ctx.moveTo(lx,ly2);ctx.lineTo(lx+20,ly2);ctx.stroke();
-  ctx.fillStyle="#000"; ctx.font="8px Times New Roman";
-  ctx.fillText("Major Road",lx+24,ly2+3); ly2+=12;
+  // ── LEGEND (bottom panel, centre zone) ──
+  var lx=MARGIN.left+200, ly2=BY+20;
+  ctx.save();
+  ctx.font="bold 11px Times New Roman"; ctx.fillStyle="#000";
+  ctx.fillText("LEGEND", lx, ly2); ly2+=16;
+  ctx.strokeStyle="#000"; ctx.lineWidth=0.8;
+  ctx.beginPath();ctx.moveTo(lx,ly2);ctx.lineTo(lx+300,ly2);ctx.stroke(); ly2+=12;
 
-  // minor road
-  ctx.strokeStyle="#888"; ctx.lineWidth=1.2;
-  ctx.beginPath();ctx.moveTo(lx,ly2);ctx.lineTo(lx+20,ly2);ctx.stroke();
-  ctx.fillStyle="#000"; ctx.font="8px Times New Roman";
-  ctx.fillText("Minor Road",lx+24,ly2+3); ly2+=12;
+  // 2-column layout
+  var col1x=lx, col2x=lx+160, row=ly2;
 
-  // river
-  ctx.strokeStyle="#2471a3"; ctx.lineWidth=1.8;
-  ctx.beginPath();ctx.moveTo(lx,ly2);ctx.lineTo(lx+20,ly2);ctx.stroke();
-  ctx.fillStyle="#000"; ctx.font="8px Times New Roman";
-  ctx.fillText("River",lx+24,ly2+3); ly2+=12;
+  // col1: town
+  ctx.fillStyle="#000"; ctx.beginPath();ctx.arc(col1x+7,row,5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#fff"; ctx.beginPath();ctx.arc(col1x+7,row,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Town",col1x+16,row+4);
 
-  // sample
+  // col2: major road
+  ctx.strokeStyle="#c0392b"; ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(col2x,row);ctx.lineTo(col2x+24,row);ctx.stroke();
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Major Road",col2x+28,row+4);
+  row+=18;
+
+  // col1: minor road
+  ctx.strokeStyle="#888"; ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(col1x,row);ctx.lineTo(col1x+24,row);ctx.stroke();
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Minor Road",col1x+28,row+4);
+
+  // col2: river
+  ctx.strokeStyle="#2471a3"; ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(col2x,row);ctx.lineTo(col2x+24,row);ctx.stroke();
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("River",col2x+28,row+4);
+  row+=18;
+
+  // col1: sample
   ctx.fillStyle="#c0392b";
-  ctx.beginPath();ctx.moveTo(lx+6,ly2-7);ctx.lineTo(lx+12,ly2+3);ctx.lineTo(lx,ly2+3);ctx.closePath();ctx.fill();
-  ctx.fillStyle="#000"; ctx.font="8px Times New Roman";
-  ctx.fillText("Sample Point",lx+16,ly2+3); ly2+=14;
+  ctx.beginPath();ctx.moveTo(col1x+8,row-9);ctx.lineTo(col1x+15,row+4);ctx.lineTo(col1x+1,row+4);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Sample Point",col1x+20,row+4);
+  row+=18;
 
-  // geology colours (MAP 3 only)
+  // lithology (MAP 3)
   if(mapType==="map3"){
-    ctx.beginPath();ctx.moveTo(lx,ly2);ctx.lineTo(lx+160,ly2);ctx.stroke(); ly2+=8;
-    ctx.font="bold 8px Times New Roman"; ctx.fillText("LITHOLOGY",lx,ly2); ly2+=10;
+    ctx.beginPath();ctx.moveTo(lx,row);ctx.lineTo(lx+300,row);ctx.stroke(); row+=12;
+    ctx.font="bold 10px Times New Roman"; ctx.fillStyle="#000"; ctx.fillText("LITHOLOGY",lx,row); row+=12;
     var usedRocks={};
     geoZones.forEach(function(z){usedRocks[z.rock]=true;});
-    Object.keys(usedRocks).forEach(function(rock){
+    var rockKeys=Object.keys(usedRocks); var col=0;
+    rockKeys.forEach(function(rock){
+      var rx2=col===0?col1x:col2x, ry=row;
       ctx.fillStyle=ROCK_COLORS[rock]||"#ccc";
-      ctx.fillRect(lx,ly2-8,12,10); ctx.strokeStyle="#333"; ctx.lineWidth=0.5; ctx.strokeRect(lx,ly2-8,12,10);
-      ctx.fillStyle="#000"; ctx.font="8px Times New Roman";
-      ctx.fillText(rock,lx+16,ly2); ly2+=13;
+      ctx.fillRect(rx2,ry-10,14,12); ctx.strokeStyle="#333"; ctx.lineWidth=0.5; ctx.strokeRect(rx2,ry-10,14,12);
+      ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText(rock,rx2+18,ry);
+      col++; if(col>=2){col=0;row+=16;}
     });
   }
   ctx.restore();
 
-  // ── TITLE BLOCK ──
-  var tx2=MARGIN.left+MAP_W+14, ty=H-MARGIN.bottom-10;
+  // ── TITLE BLOCK (bottom panel, right zone) ──
+  var tbx=W-MARGIN.right-280, tby=BY+10, tbw=260, tbh=H-BY-20;
   ctx.save();
-  ctx.strokeStyle="#000"; ctx.lineWidth=1;
-  ctx.strokeRect(MARGIN.left+MAP_W+8,H-MARGIN.bottom+4,MARGIN.right-16,MARGIN.bottom-12);
-  ctx.font="bold 9px Times New Roman"; ctx.fillStyle="#000";
-  var title=mapType==="map2"
-    ?"MAP 2: SAMPLE LOCATION MAP OF "
-    :"MAP 3: GEOLOGIC MAP OF ";
-  ctx.fillText(title,tx2,ty-18);
-  ctx.font="bold 10px Times New Roman";
-  ctx.fillText((projectName||"[STUDY AREA]").toUpperCase(),tx2,ty-6);
-  ctx.restore();
-
-  // ── MAIN TITLE (top) ──
-  ctx.save();
-  ctx.font="bold 14px Times New Roman"; ctx.fillStyle="#000"; ctx.textAlign="center";
-  var mainTitle=mapType==="map2"
-    ?"MAP 2: SAMPLE LOCATION MAP"
-    :"MAP 3: GEOLOGIC MAP";
-  ctx.fillText(mainTitle,MARGIN.left+MAP_W/2,MARGIN.top-20);
-  if(projectName){
-    ctx.font="10px Times New Roman";
-    ctx.fillText("OF "+projectName.toUpperCase()+" AREA",MARGIN.left+MAP_W/2,MARGIN.top-8);
-  }
+  ctx.strokeStyle="#000"; ctx.lineWidth=1.2;
+  ctx.strokeRect(tbx,tby,tbw,tbh);
+  // inner divider
+  ctx.beginPath();ctx.moveTo(tbx,tby+tbh*0.45);ctx.lineTo(tbx+tbw,tby+tbh*0.45);ctx.stroke();
+  // top: map title
+  ctx.font="bold 11px Times New Roman"; ctx.fillStyle="#000"; ctx.textAlign="center";
+  var tb1=mapType==="map2"?"MAP 2: SAMPLE LOCATION MAP":"MAP 3: GEOLOGIC MAP";
+  ctx.fillText(tb1, tbx+tbw/2, tby+20);
+  ctx.font="10px Times New Roman";
+  ctx.fillText("OF "+(projectName||"STUDY AREA").toUpperCase(), tbx+tbw/2, tby+36);
+  // bottom: metadata
+  ctx.font="9px Times New Roman"; ctx.fillStyle="#555";
+  ctx.fillText("Projection: WGS84 / Geographic", tbx+tbw/2, tby+tbh*0.45+18);
+  ctx.fillText("Base map: © OpenStreetMap contributors", tbx+tbw/2, tby+tbh*0.45+32);
+  ctx.fillText("Generated by Geo Mapping System", tbx+tbw/2, tby+tbh*0.45+46);
   ctx.textAlign="left"; ctx.restore();
 }
 
