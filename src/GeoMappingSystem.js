@@ -44,35 +44,30 @@ function loadTile(z,x,y,cb){
 function dist(p1,p2){return Math.sqrt(Math.pow(p1.x-p2.x,2)+Math.pow(p1.y-p2.y,2));}
 
 // ── MAP OUTPUT RENDERER ────────────────────────────────────────────────────
-function renderMap(type, data, projectName) {
-  // type: "map2" | "map3"
-  const W = 1123, H = 1587; // A3 portrait at 96dpi (297x420mm)
+function renderMap(type, data, projectName, exportDPI) {
+  exportDPI = exportDPI || 300;
+  const W = 1123, H = 1587; // A3 portrait at 96dpi
   const MARGIN = { top: 70, left: 60, right: 60, bottom: 220 };
   const MAP_W = W - MARGIN.left - MARGIN.right;
   const MAP_H = H - MARGIN.top - MARGIN.bottom;
-
   const { towns, roads, rivers, samples, geoZones, center, zoom } = data;
-
-  function p(lat, lon) {
-    var raw = ll2px(lat, lon, center.lat, center.lon, zoom, MAP_W, MAP_H);
-    return { x: raw.x + MARGIN.left, y: raw.y + MARGIN.top };
-  }
 
   var html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8"/>
 <title>${type === "map2" ? "MAP 2 — Sample Location Map" : "MAP 3 — Geological Map"} | ${projectName}</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #e8e8e8; font-family: "Times New Roman", serif; }
-  .page { width: ${W}px; margin: 20px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,0.18); position: relative; }
+  .page { width: ${W}px; margin: 20px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,0.18); }
   canvas { display: block; }
-  .controls { width: ${W}px; margin: 0 auto; padding: 12px; background: #f5f5f5; border: 1px solid #ccc; display: flex; gap: 10px; align-items: center; }
+  .controls { width: ${W}px; margin: 0 auto; padding: 12px; background: #f5f5f5; border: 1px solid #ccc; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .controls button { background: #2c5f8a; color: #fff; border: none; padding: 8px 18px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; font-family: sans-serif; }
   .controls button:hover { background: #1a4a70; }
   .controls span { color: #666; font-size: 12px; font-family: sans-serif; }
+  .dpi-badge { background: #e8f4e8; border: 1px solid #4a8a4a; border-radius: 4px; padding: 4px 10px; font-size: 12px; color: #2a6a2a; font-family: sans-serif; font-weight: bold; }
   @media print {
     body { background: #fff; }
     .controls { display: none; }
@@ -83,10 +78,11 @@ function renderMap(type, data, projectName) {
 </head>
 <body>
 <div class="controls">
-  <button onclick="download300PNG()">⬇ PNG 300dpi</button>
+  <button onclick="download300PNG()">⬇ PNG ${exportDPI}dpi</button>
   <button onclick="downloadPDF()">⬇ PDF A3</button>
   <button onclick="window.print()">🖨 Print</button>
-  <span>PNG = 300dpi high-res · PDF = A3 print-ready · Print = browser dialog</span>
+  <span class="dpi-badge">Quality: ${exportDPI} dpi</span>
+  <span>PDF = A3 portrait · Print: set margins to None</span>
 </div>
 <div class="page">
   <canvas id="mapCanvas" width="${W}" height="${H}"></canvas>
@@ -105,7 +101,8 @@ var geoZones=${JSON.stringify(geoZones)};
 var ROCK_COLORS=${JSON.stringify(ROCK_COLORS)};
 var projectName=${JSON.stringify(projectName)};
 var mapType=${JSON.stringify(type)};
-
+var exportDPI=${exportDPI};
+var SCREEN_DPI=96;
 var TILE_SIZE=256;
 var tileCache={};
 var canvas=document.getElementById("mapCanvas");
@@ -119,19 +116,19 @@ function ll2px(lat,lon){
   var ws=TILE_SIZE*Math.pow(2,zoom);
   function ly(la){var s=Math.sin(la*Math.PI/180);return ws/(2*Math.PI)*(Math.PI-Math.log((1+s)/(1-s))/2);}
   function lx(lo){return ws*(lo+180)/360;}
-  return {x:MAP_W/2+(lx(lon)-lx(center.lon))+MARGIN.left, y:MAP_H/2+(ly(lat)-ly(center.lat))+MARGIN.top};
+  return {x:MAP_W/2+(lx(lon)-lx(center.lon))+MARGIN.left,y:MAP_H/2+(ly(lat)-ly(center.lat))+MARGIN.top};
 }
 function px2ll(px,py){
   var ws=TILE_SIZE*Math.pow(2,zoom);
   function ly(la){var s=Math.sin(la*Math.PI/180);return ws/(2*Math.PI)*(Math.PI-Math.log((1+s)/(1-s))/2);}
   function lx(lo){return ws*(lo+180)/360;}
-  var wx=lx(center.lon)+(px-MARGIN.left-MAP_W/2), wy=ly(center.lat)+(py-MARGIN.top-MAP_H/2);
+  var wx=lx(center.lon)+(px-MARGIN.left-MAP_W/2),wy=ly(center.lat)+(py-MARGIN.top-MAP_H/2);
   var n=Math.PI-2*Math.PI*wy/ws;
   return {lat:180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))),lon:wx/ws*360-180};
 }
 function toDMS(deg,isLat){
   var d=Math.abs(deg),dd=Math.floor(d),mm=Math.floor((d-dd)*60),ss=Math.round(((d-dd)*60-mm)*60);
-  return dd+"°"+mm+"'"+ss+'"'+(isLat?(deg>=0?"N":"S"):(deg>=0?"E":"W"));
+  return dd+"\u00b0"+mm+"'"+ss+'"'+(isLat?(deg>=0?"N":"S"):(deg>=0?"E":"W"));
 }
 function loadTile(z,x,y,cb){
   var k=z+"/"+x+"/"+y;
@@ -142,37 +139,23 @@ function loadTile(z,x,y,cb){
   img.src="https://tile.openstreetmap.org/"+z+"/"+x+"/"+y+".png";
 }
 
-var tilesLoaded=0, tilesTotal=0;
 function drawAll(){
   ctx.clearRect(0,0,W,H);
-  // White page background
   ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
 
-  // ── OUTER BORDER ──
-  ctx.strokeStyle="#000"; ctx.lineWidth=3;
-  ctx.strokeRect(2,2,W-4,H-4);
-  ctx.strokeStyle="#000"; ctx.lineWidth=1;
-  ctx.strokeRect(8,8,W-16,H-16);
+  ctx.strokeStyle="#000"; ctx.lineWidth=3; ctx.strokeRect(2,2,W-4,H-4);
+  ctx.strokeStyle="#000"; ctx.lineWidth=1; ctx.strokeRect(8,8,W-16,H-16);
+  ctx.strokeStyle="#000"; ctx.lineWidth=1.5; ctx.strokeRect(MARGIN.left,MARGIN.top,MAP_W,MAP_H);
 
-  // ── MAP FRAME ──
-  ctx.strokeStyle="#000"; ctx.lineWidth=1.5;
-  ctx.strokeRect(MARGIN.left,MARGIN.top,MAP_W,MAP_H);
-
-  // ── CLIP to map area ──
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(MARGIN.left,MARGIN.top,MAP_W,MAP_H);
-  ctx.clip();
+  ctx.beginPath(); ctx.rect(MARGIN.left,MARGIN.top,MAP_W,MAP_H); ctx.clip();
 
-  // ── TILES ──
   var cx2=lon2tile(center.lon,zoom), cy2=lat2tile(center.lat,zoom);
   var range=Math.ceil(Math.max(MAP_W,MAP_H)/TILE_SIZE/2)+2;
   for(var tx=cx2-range;tx<=cx2+range;tx++){
     for(var ty=cy2-range;ty<=cy2+range;ty++){
-      var max=Math.pow(2,zoom);
-      if(ty<0||ty>=max)continue;
-      var ox=tx;
-      var rx=((tx%max)+max)%max;
+      var max=Math.pow(2,zoom); if(ty<0||ty>=max)continue;
+      var ox=tx, rx=((tx%max)+max)%max;
       var img=tileCache[zoom+"/"+rx+"/"+ty];
       var pt=ll2px(tile2lat(ty,zoom),tile2lon(ox,zoom));
       if(img){ctx.globalAlpha=mapType==="map3"?0.35:0.65;ctx.drawImage(img,Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);ctx.globalAlpha=1;}
@@ -180,7 +163,6 @@ function drawAll(){
     }
   }
 
-  // MAP 3: geology polygons (prominent)
   if(mapType==="map3"){
     geoZones.forEach(function(z){
       if(z.points.length<3)return;
@@ -189,7 +171,6 @@ function drawAll(){
       ctx.closePath();
       ctx.globalAlpha=0.7; ctx.fillStyle=ROCK_COLORS[z.rock]||"#ccc"; ctx.fill();
       ctx.globalAlpha=1; ctx.strokeStyle="#333"; ctx.lineWidth=1.5; ctx.stroke();
-      // centroid label
       var cx3=z.points.reduce(function(s,pt){return s+pt.lon;},0)/z.points.length;
       var cy3=z.points.reduce(function(s,pt){return s+pt.lat;},0)/z.points.length;
       var cp=ll2px(cy3,cx3);
@@ -198,20 +179,14 @@ function drawAll(){
     });
   }
 
-  // Roads
   roads.forEach(function(road){
     if(road.points.length<2)return;
     ctx.beginPath();
     road.points.forEach(function(pt,i){var pp=ll2px(pt.lat,pt.lon);if(i===0)ctx.moveTo(pp.x,pp.y);else ctx.lineTo(pp.x,pp.y);});
-    if(road.type==="major"){
-      ctx.strokeStyle="#c0392b"; ctx.lineWidth=3; ctx.stroke();
-      ctx.strokeStyle="#e07030"; ctx.lineWidth=1.5; ctx.stroke();
-    } else {
-      ctx.strokeStyle="#888"; ctx.lineWidth=1.2; ctx.stroke();
-    }
+    if(road.type==="major"){ctx.strokeStyle="#c0392b";ctx.lineWidth=3;ctx.stroke();ctx.strokeStyle="#e07030";ctx.lineWidth=1.5;ctx.stroke();}
+    else{ctx.strokeStyle="#888";ctx.lineWidth=1.2;ctx.stroke();}
   });
 
-  // Rivers
   rivers.forEach(function(river){
     if(river.points.length<2)return;
     ctx.beginPath();
@@ -219,39 +194,29 @@ function drawAll(){
     ctx.strokeStyle="#2471a3"; ctx.lineWidth=1.8; ctx.stroke();
   });
 
-  // Towns
   towns.forEach(function(town){
     var pp=ll2px(town.lat,town.lon);
     ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(pp.x,pp.y,4,0,Math.PI*2); ctx.fill();
     ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(pp.x,pp.y,2.5,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="#000"; ctx.font="bold 8px Times New Roman";
-    ctx.fillText(town.name||"Town",pp.x+5,pp.y-3);
+    ctx.fillStyle="#000"; ctx.font="bold 8px Times New Roman"; ctx.fillText(town.name||"Town",pp.x+5,pp.y-3);
   });
 
-  // Samples (MAP 2 prominent, MAP 3 smaller)
   samples.forEach(function(s){
-    var pp=ll2px(s.lat,s.lon);
-    var sz=mapType==="map2"?8:5;
+    var pp=ll2px(s.lat,s.lon); var sz=mapType==="map2"?8:5;
     ctx.fillStyle="#c0392b";
-    ctx.beginPath();
-    ctx.moveTo(pp.x,pp.y-sz); ctx.lineTo(pp.x+sz*0.75,pp.y+sz*0.5); ctx.lineTo(pp.x-sz*0.75,pp.y+sz*0.5);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle="#7b241c"; ctx.lineWidth=0.5; ctx.stroke();
-    if(mapType==="map2"){
-      ctx.fillStyle="#000"; ctx.font="7px Times New Roman";
-      ctx.fillText(s.id,pp.x+sz+1,pp.y+2);
-    }
+    ctx.beginPath(); ctx.moveTo(pp.x,pp.y-sz); ctx.lineTo(pp.x+sz*0.75,pp.y+sz*0.5); ctx.lineTo(pp.x-sz*0.75,pp.y+sz*0.5);
+    ctx.closePath(); ctx.fill(); ctx.strokeStyle="#7b241c"; ctx.lineWidth=0.5; ctx.stroke();
+    if(mapType==="map2"){ctx.fillStyle="#000"; ctx.font="7px Times New Roman"; ctx.fillText(s.id,pp.x+sz+1,pp.y+2);}
   });
 
-  ctx.restore(); // end clip
+  ctx.restore();
 
-  // ── COORDINATE GRID ──
+  // Grid
   ctx.save();
   ctx.strokeStyle="rgba(0,0,0,0.3)"; ctx.lineWidth=0.5; ctx.setLineDash([3,3]);
   ctx.font="8px Times New Roman"; ctx.fillStyle="#000";
   var step=zoom<=6?5:zoom<=8?2:zoom<=10?1:0.5;
-  var tl=px2ll(MARGIN.left,MARGIN.top);
-  var br=px2ll(MARGIN.left+MAP_W,MARGIN.top+MAP_H);
+  var tl=px2ll(MARGIN.left,MARGIN.top), br=px2ll(MARGIN.left+MAP_W,MARGIN.top+MAP_H);
   for(var lo=Math.ceil(tl.lon/step)*step;lo<=br.lon;lo+=step){
     var ppx=ll2px(center.lat,lo).x;
     if(ppx<MARGIN.left||ppx>MARGIN.left+MAP_W)continue;
@@ -263,51 +228,44 @@ function drawAll(){
     var ppy=ll2px(la,center.lon).y;
     if(ppy<MARGIN.top||ppy>MARGIN.top+MAP_H)continue;
     ctx.beginPath();ctx.moveTo(MARGIN.left,ppy);ctx.lineTo(MARGIN.left+MAP_W,ppy);ctx.stroke();
-    ctx.save();ctx.translate(MARGIN.left-4,ppy+14);ctx.rotate(-Math.PI/2);
-    ctx.fillText(toDMS(la,true),0,0);ctx.restore();
-    ctx.save();ctx.translate(MARGIN.left+MAP_W+12,ppy+14);ctx.rotate(-Math.PI/2);
-    ctx.fillText(toDMS(la,true),0,0);ctx.restore();
+    ctx.save();ctx.translate(MARGIN.left-4,ppy+14);ctx.rotate(-Math.PI/2);ctx.fillText(toDMS(la,true),0,0);ctx.restore();
+    ctx.save();ctx.translate(MARGIN.left+MAP_W+12,ppy+14);ctx.rotate(-Math.PI/2);ctx.fillText(toDMS(la,true),0,0);ctx.restore();
   }
   ctx.setLineDash([]); ctx.restore();
 
-  // ── MAIN TITLE (top, centered over map) ──
+  // Title
   ctx.save();
   ctx.font="bold 16px Times New Roman"; ctx.fillStyle="#000"; ctx.textAlign="center";
-  var mainTitle=mapType==="map2"?"MAP 2: SAMPLE LOCATION MAP":"MAP 3: GEOLOGIC MAP";
-  ctx.fillText(mainTitle, MARGIN.left+MAP_W/2, MARGIN.top-30);
+  ctx.fillText(mapType==="map2"?"MAP 2: SAMPLE LOCATION MAP":"MAP 3: GEOLOGIC MAP",MARGIN.left+MAP_W/2,MARGIN.top-30);
   ctx.font="11px Times New Roman";
-  ctx.fillText("OF "+(projectName||"STUDY AREA").toUpperCase(), MARGIN.left+MAP_W/2, MARGIN.top-14);
+  ctx.fillText("OF "+(projectName||"STUDY AREA").toUpperCase(),MARGIN.left+MAP_W/2,MARGIN.top-14);
   ctx.textAlign="left"; ctx.restore();
 
-  // ── BOTTOM PANEL DIVIDER ──
-  var BY = MARGIN.top+MAP_H+10; // top of bottom panel
-  ctx.save();
-  ctx.strokeStyle="#000"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(MARGIN.left, BY); ctx.lineTo(W-MARGIN.right, BY); ctx.stroke();
+  // Bottom panel
+  var BY=MARGIN.top+MAP_H+10;
+  ctx.save(); ctx.strokeStyle="#000"; ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(MARGIN.left,BY);ctx.lineTo(W-MARGIN.right,BY);ctx.stroke();
   ctx.restore();
 
-  // ── NORTH ARROW (bottom panel, left zone) ──
+  // North arrow
   var ax=MARGIN.left+60, ay=BY+60;
   ctx.save();
   ctx.fillStyle="#fff"; ctx.strokeStyle="#000"; ctx.lineWidth=1.2;
   ctx.beginPath();ctx.arc(ax,ay,28,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.fillStyle="#000";
-  ctx.beginPath();ctx.moveTo(ax,ay-22);ctx.lineTo(ax-9,ay+5);ctx.lineTo(ax+9,ay+5);ctx.closePath();ctx.fill();
-  ctx.fillStyle="#fff";
-  ctx.beginPath();ctx.moveTo(ax,ay+22);ctx.lineTo(ax-9,ay-5);ctx.lineTo(ax+9,ay-5);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#000"; ctx.beginPath();ctx.moveTo(ax,ay-22);ctx.lineTo(ax-9,ay+5);ctx.lineTo(ax+9,ay+5);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#fff"; ctx.beginPath();ctx.moveTo(ax,ay+22);ctx.lineTo(ax-9,ay-5);ctx.lineTo(ax+9,ay-5);ctx.closePath();ctx.fill();
   ctx.strokeStyle="#000"; ctx.lineWidth=0.8;
   ctx.beginPath();ctx.moveTo(ax,ay+22);ctx.lineTo(ax-9,ay-5);ctx.lineTo(ax+9,ay-5);ctx.closePath();ctx.stroke();
   ctx.fillStyle="#000"; ctx.font="bold 15px Times New Roman"; ctx.textAlign="center";
   ctx.fillText("N",ax,ay-27); ctx.textAlign="left"; ctx.restore();
 
-  // ── SCALE BAR (bottom panel, left zone below north arrow) ──
+  // Scale bar
   var mpp=(156543.03392*Math.cos(center.lat*Math.PI/180))/Math.pow(2,zoom);
   var bm=zoom>=12?500:zoom>=10?2000:zoom>=8?20000:zoom>=6?100000:500000;
-  var bp=Math.min(bm/mpp, 180);
+  var bp=Math.min(bm/mpp,180);
   var sx=MARGIN.left+20, sy=BY+115;
   ctx.save();
-  ctx.font="bold 10px Times New Roman"; ctx.fillStyle="#000";
-  ctx.fillText("SCALE", sx, sy-16);
+  ctx.font="bold 10px Times New Roman"; ctx.fillStyle="#000"; ctx.fillText("SCALE",sx,sy-16);
   ctx.fillStyle="#000"; ctx.fillRect(sx,sy-10,bp/2,10);
   ctx.fillStyle="#fff"; ctx.fillRect(sx+bp/2,sy-10,bp/2,10);
   ctx.strokeStyle="#000"; ctx.lineWidth=1; ctx.strokeRect(sx,sy-10,bp,10);
@@ -316,179 +274,111 @@ function drawAll(){
   ctx.fillText(bm>=1000?bm/1000+" km":bm+" m",sx+bp-10,sy+12);
   ctx.restore();
 
-  // ── LEGEND (bottom panel, centre zone) ──
+  // Legend
   var lx=MARGIN.left+200, ly2=BY+20;
   ctx.save();
-  ctx.font="bold 11px Times New Roman"; ctx.fillStyle="#000";
-  ctx.fillText("LEGEND", lx, ly2); ly2+=16;
+  ctx.font="bold 11px Times New Roman"; ctx.fillStyle="#000"; ctx.fillText("LEGEND",lx,ly2); ly2+=16;
   ctx.strokeStyle="#000"; ctx.lineWidth=0.8;
   ctx.beginPath();ctx.moveTo(lx,ly2);ctx.lineTo(lx+300,ly2);ctx.stroke(); ly2+=12;
-
-  // 2-column layout
   var col1x=lx, col2x=lx+160, row=ly2;
-
-  // col1: town
   ctx.fillStyle="#000"; ctx.beginPath();ctx.arc(col1x+7,row,5,0,Math.PI*2);ctx.fill();
   ctx.fillStyle="#fff"; ctx.beginPath();ctx.arc(col1x+7,row,3,0,Math.PI*2);ctx.fill();
   ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Town",col1x+16,row+4);
-
-  // col2: major road
-  ctx.strokeStyle="#c0392b"; ctx.lineWidth=3;
-  ctx.beginPath();ctx.moveTo(col2x,row);ctx.lineTo(col2x+24,row);ctx.stroke();
-  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Major Road",col2x+28,row+4);
-  row+=18;
-
-  // col1: minor road
-  ctx.strokeStyle="#888"; ctx.lineWidth=1.5;
-  ctx.beginPath();ctx.moveTo(col1x,row);ctx.lineTo(col1x+24,row);ctx.stroke();
+  ctx.strokeStyle="#c0392b"; ctx.lineWidth=3; ctx.beginPath();ctx.moveTo(col2x,row);ctx.lineTo(col2x+24,row);ctx.stroke();
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Major Road",col2x+28,row+4); row+=18;
+  ctx.strokeStyle="#888"; ctx.lineWidth=1.5; ctx.beginPath();ctx.moveTo(col1x,row);ctx.lineTo(col1x+24,row);ctx.stroke();
   ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Minor Road",col1x+28,row+4);
-
-  // col2: river
-  ctx.strokeStyle="#2471a3"; ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(col2x,row);ctx.lineTo(col2x+24,row);ctx.stroke();
-  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("River",col2x+28,row+4);
-  row+=18;
-
-  // col1: sample
+  ctx.strokeStyle="#2471a3"; ctx.lineWidth=2; ctx.beginPath();ctx.moveTo(col2x,row);ctx.lineTo(col2x+24,row);ctx.stroke();
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("River",col2x+28,row+4); row+=18;
   ctx.fillStyle="#c0392b";
   ctx.beginPath();ctx.moveTo(col1x+8,row-9);ctx.lineTo(col1x+15,row+4);ctx.lineTo(col1x+1,row+4);ctx.closePath();ctx.fill();
-  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Sample Point",col1x+20,row+4);
-  row+=18;
-
-  // lithology (MAP 3)
+  ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText("Sample Point",col1x+20,row+4); row+=18;
   if(mapType==="map3"){
     ctx.beginPath();ctx.moveTo(lx,row);ctx.lineTo(lx+300,row);ctx.stroke(); row+=12;
     ctx.font="bold 10px Times New Roman"; ctx.fillStyle="#000"; ctx.fillText("LITHOLOGY",lx,row); row+=12;
-    var usedRocks={};
-    geoZones.forEach(function(z){usedRocks[z.rock]=true;});
-    var rockKeys=Object.keys(usedRocks); var col=0;
-    rockKeys.forEach(function(rock){
+    var usedRocks={}; geoZones.forEach(function(z){usedRocks[z.rock]=true;});
+    var col=0;
+    Object.keys(usedRocks).forEach(function(rock){
       var rx2=col===0?col1x:col2x, ry=row;
-      ctx.fillStyle=ROCK_COLORS[rock]||"#ccc";
-      ctx.fillRect(rx2,ry-10,14,12); ctx.strokeStyle="#333"; ctx.lineWidth=0.5; ctx.strokeRect(rx2,ry-10,14,12);
+      ctx.fillStyle=ROCK_COLORS[rock]||"#ccc"; ctx.fillRect(rx2,ry-10,14,12);
+      ctx.strokeStyle="#333"; ctx.lineWidth=0.5; ctx.strokeRect(rx2,ry-10,14,12);
       ctx.fillStyle="#000"; ctx.font="10px Times New Roman"; ctx.fillText(rock,rx2+18,ry);
       col++; if(col>=2){col=0;row+=16;}
     });
   }
   ctx.restore();
 
-  // ── TITLE BLOCK (bottom panel, right zone) ──
+  // Title block
   var tbx=W-MARGIN.right-280, tby=BY+10, tbw=260, tbh=H-BY-20;
   ctx.save();
-  ctx.strokeStyle="#000"; ctx.lineWidth=1.2;
-  ctx.strokeRect(tbx,tby,tbw,tbh);
-  // inner divider
+  ctx.strokeStyle="#000"; ctx.lineWidth=1.2; ctx.strokeRect(tbx,tby,tbw,tbh);
   ctx.beginPath();ctx.moveTo(tbx,tby+tbh*0.45);ctx.lineTo(tbx+tbw,tby+tbh*0.45);ctx.stroke();
-  // top: map title
   ctx.font="bold 11px Times New Roman"; ctx.fillStyle="#000"; ctx.textAlign="center";
-  var tb1=mapType==="map2"?"MAP 2: SAMPLE LOCATION MAP":"MAP 3: GEOLOGIC MAP";
-  ctx.fillText(tb1, tbx+tbw/2, tby+20);
+  ctx.fillText(mapType==="map2"?"MAP 2: SAMPLE LOCATION MAP":"MAP 3: GEOLOGIC MAP",tbx+tbw/2,tby+20);
   ctx.font="10px Times New Roman";
-  ctx.fillText("OF "+(projectName||"STUDY AREA").toUpperCase(), tbx+tbw/2, tby+36);
-  // bottom: metadata
+  ctx.fillText("OF "+(projectName||"STUDY AREA").toUpperCase(),tbx+tbw/2,tby+36);
   ctx.font="9px Times New Roman"; ctx.fillStyle="#555";
-  ctx.fillText("Projection: WGS84 / Geographic", tbx+tbw/2, tby+tbh*0.45+18);
-  ctx.fillText("Base map: © OpenStreetMap contributors", tbx+tbw/2, tby+tbh*0.45+32);
-  ctx.fillText("Generated by Geo Mapping System", tbx+tbw/2, tby+tbh*0.45+46);
+  ctx.fillText("Projection: WGS84 / Geographic",tbx+tbw/2,tby+tbh*0.45+18);
+  ctx.fillText("Base map: \u00a9 OpenStreetMap contributors",tbx+tbw/2,tby+tbh*0.45+32);
+  ctx.fillText("Generated by Geo Mapping System",tbx+tbw/2,tby+tbh*0.45+46);
   ctx.textAlign="left"; ctx.restore();
 }
 
-// Load tiles then draw
 function init(){
   var cx2=lon2tile(center.lon,zoom), cy2=lat2tile(center.lat,zoom);
-  var range=Math.ceil(Math.max(MAP_W,MAP_H)/TILE_SIZE/2)+2;
-  var toLoad=[];
+  var range=Math.ceil(Math.max(MAP_W,MAP_H)/TILE_SIZE/2)+2, toLoad=[];
   for(var tx=cx2-range;tx<=cx2+range;tx++){
     for(var ty=cy2-range;ty<=cy2+range;ty++){
-      var max=Math.pow(2,zoom);
-      if(ty<0||ty>=max)continue;
+      var max=Math.pow(2,zoom); if(ty<0||ty>=max)continue;
       toLoad.push({z:zoom,x:((tx%max)+max)%max,y:ty});
     }
   }
-  tilesTotal=toLoad.length; tilesLoaded=0;
-  if(tilesTotal===0){drawAll();return;}
-  toLoad.forEach(function(t){
-    loadTile(t.z,t.x,t.y,function(){
-      tilesLoaded++;
-      if(tilesLoaded>=tilesTotal)drawAll();
-      else drawAll(); // draw incrementally
-    });
-  });
+  if(toLoad.length===0){drawAll();return;}
+  toLoad.forEach(function(t){loadTile(t.z,t.x,t.y,function(){drawAll();});});
 }
 
 function getFilename(ext){
   return (mapType==="map2"?"MAP2_":"MAP3_")+(projectName||"geomap").replace(/\s+/g,"_")+"."+ext;
 }
 
-// ── SCREEN-RES PNG (quick) ──
-function downloadPNG(){
-  var a=document.createElement("a");
-  a.download=getFilename("png");
-  a.href=canvas.toDataURL("image/png");
-  a.click();
-}
-
-// ── 300dpi HIGH-RES PNG ──
 function download300PNG(){
-  var SCALE=3.125; // 96dpi × 3.125 = 300dpi
+  var SCALE=exportDPI/SCREEN_DPI;
   var hiW=Math.round(W*SCALE), hiH=Math.round(H*SCALE);
+  if(exportDPI>=1200){
+    var ok=confirm("1200dpi will produce a ~120MB file and may take 30+ seconds. Continue?");
+    if(!ok)return;
+  }
   var hiCanvas=document.createElement("canvas");
   hiCanvas.width=hiW; hiCanvas.height=hiH;
   var hiCtx=hiCanvas.getContext("2d");
-
-  // Scale everything up
   hiCtx.scale(SCALE,SCALE);
-
-  // Re-draw onto hi-res canvas
-  // White background
   hiCtx.fillStyle="#ffffff"; hiCtx.fillRect(0,0,W,H);
-
-  // Tiles
   var cx2=lon2tile(center.lon,zoom), cy2=lat2tile(center.lat,zoom);
   var range=Math.ceil(Math.max(MAP_W,MAP_H)/TILE_SIZE/2)+2;
   for(var tx=cx2-range;tx<=cx2+range;tx++){
     for(var ty=cy2-range;ty<=cy2+range;ty++){
-      var max=Math.pow(2,zoom);
-      if(ty<0||ty>=max)continue;
+      var max=Math.pow(2,zoom); if(ty<0||ty>=max)continue;
       var ox=tx, rx=((tx%max)+max)%max;
       var img=tileCache[zoom+"/"+rx+"/"+ty];
       var pt=ll2px(tile2lat(ty,zoom),tile2lon(ox,zoom));
       if(img){hiCtx.globalAlpha=mapType==="map3"?0.35:0.65;hiCtx.drawImage(img,Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);hiCtx.globalAlpha=1;}
     }
   }
-
-  // Copy the screen canvas on top (all vector elements already drawn)
   hiCtx.drawImage(canvas,0,0,W,H);
-
-  // Export
   hiCanvas.toBlob(function(blob){
     var url=URL.createObjectURL(blob);
-    var a=document.createElement("a");
-    a.download=getFilename("png");
-    a.href=url; a.click();
+    var a=document.createElement("a"); a.download=getFilename("png"); a.href=url; a.click();
     setTimeout(function(){URL.revokeObjectURL(url);},1000);
   },"image/png");
 }
 
-// ── PDF A3 ──
 function downloadPDF(){
-  if(!window.jspdf){
-    alert("PDF library not loaded yet. Please wait a moment and try again.");
-    return;
-  }
-  var doc=new window.jspdf.jsPDF({
-    orientation:"portrait",
-    unit:"mm",
-    format:"a3"
-  });
-  // A3 = 297 × 420mm
-  var pdfW=297, pdfH=420;
-  var imgData=canvas.toDataURL("image/png",1.0);
-  doc.addImage(imgData,"PNG",0,0,pdfW,pdfH);
+  if(!window.jspdf){alert("PDF library not loaded yet. Please wait a moment and try again.");return;}
+  var doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:"a3"});
+  doc.addImage(canvas.toDataURL("image/png",1.0),"PNG",0,0,297,420);
   doc.save(getFilename("pdf"));
 }
 
-window.downloadPNG=downloadPNG;
 window.download300PNG=download300PNG;
 window.downloadPDF=downloadPDF;
 init();
@@ -511,6 +401,13 @@ const MODE_COLORS = {
   sample:"#5a1a1a", geology:"#2a1a5a"
 };
 
+const DPI_OPTIONS = [
+  {dpi:150, label:"150 dpi", desc:"Screen / digital"},
+  {dpi:300, label:"300 dpi", desc:"Thesis standard"},
+  {dpi:600, label:"600 dpi", desc:"NGSA publication"},
+  {dpi:1200,label:"1200 dpi",desc:"Large format print"},
+];
+
 export default function GeoMappingSystem() {
   var canvasRef=useRef(null), containerRef=useRef(null);
   var [center,setCenter]=useState({lat:NIGERIA_CENTER[0],lon:NIGERIA_CENTER[1]});
@@ -521,6 +418,7 @@ export default function GeoMappingSystem() {
   var [size,setSize]=useState({w:800,h:560});
   var [tab,setTab]=useState("draw");
   var [projectName,setProjectName]=useState("");
+  var [exportDPI,setExportDPI]=useState(300);
 
   var [towns,setTowns]=useState([]);
   var [roads,setRoads]=useState([]);
@@ -556,8 +454,7 @@ export default function GeoMappingSystem() {
     var range=Math.ceil(Math.max(W,H)/TILE_SIZE/2)+2, next=[];
     for(var x=cx-range;x<=cx+range;x++){
       for(var y=cy-range;y<=cy+range;y++){
-        var max=Math.pow(2,zoom);
-        if(y<0||y>=max)continue;
+        var max=Math.pow(2,zoom); if(y<0||y>=max)continue;
         next.push({z:zoom,x:((x%max)+max)%max,y:y,ox:x});
       }
     }
@@ -745,7 +642,7 @@ export default function GeoMappingSystem() {
       var d=dragRef.current,ws=TILE_SIZE*Math.pow(2,zoom);
       var r=canvasRef.current.getBoundingClientRect();
       setCenter({lat:Math.max(-85,Math.min(85,d.clat+((e.clientY-d.sy)*(H/r.height)/ws)*180)),lon:d.clon+(-(e.clientX-d.sx)*(W/r.width)/ws)*360});
-    } else { setMousePos(getLL(e)); }
+    } else {setMousePos(getLL(e));}
   }
   function onMouseUp(e){if(mode==="pan"){dragRef.current=null;}else{handleClick(e);}}
   function onWheel(e){e.preventDefault();setZoom(function(z){return Math.max(4,Math.min(18,z+(e.deltaY>0?-1:1)));});}
@@ -764,28 +661,23 @@ export default function GeoMappingSystem() {
   }
   function clearAll(){setTowns([]);setRoads([]);setRivers([]);setSamples([]);setGeoZones([]);setActiveRoad(null);setActiveRiver(null);setActiveGeo(null);}
 
-  var openMap = useCallback(function(type){
+  var openMap=useCallback(function(type){
     var data={towns,roads,rivers,samples,geoZones,center,zoom};
-    var html=renderMap(type,data,projectName||"Study Area");
-    var w=window.open("","_blank");
-    w.document.write(html);
-    w.document.close();
-  },[towns,roads,rivers,samples,geoZones,center,zoom,projectName]);
+    var html=renderMap(type,data,projectName||"Study Area",exportDPI);
+    var w=window.open("","_blank"); w.document.write(html); w.document.close();
+  },[towns,roads,rivers,samples,geoZones,center,zoom,projectName,exportDPI]);
 
-  var openMapExport = useCallback(function(type, fmt){
+  var openMapExport=useCallback(function(type,fmt){
     var data={towns,roads,rivers,samples,geoZones,center,zoom};
-    var html=renderMap(type,data,projectName||"Study Area");
-    var w=window.open("","_blank");
-    w.document.write(html);
-    w.document.close();
-    // Trigger export after map renders and tiles load
-    w.addEventListener("load", function(){
+    var html=renderMap(type,data,projectName||"Study Area",exportDPI);
+    var w=window.open("","_blank"); w.document.write(html); w.document.close();
+    w.addEventListener("load",function(){
       setTimeout(function(){
-        if(fmt==="png") w.download300PNG && w.download300PNG();
-        if(fmt==="pdf") w.downloadPDF && w.downloadPDF();
-      }, 3000);
+        if(fmt==="png"&&w.download300PNG)w.download300PNG();
+        if(fmt==="pdf"&&w.downloadPDF)w.downloadPDF();
+      },3000);
     });
-  },[towns,roads,rivers,samples,geoZones,center,zoom,projectName]);
+  },[towns,roads,rivers,samples,geoZones,center,zoom,projectName,exportDPI]);
 
   var totalNodes=roads.reduce(function(s,r){return s+r.points.length;},0)+rivers.reduce(function(s,r){return s+r.points.length;},0);
   var btnBase={border:"none",borderRadius:6,cursor:"pointer",fontFamily:"sans-serif",fontWeight:"bold"};
@@ -799,21 +691,15 @@ export default function GeoMappingSystem() {
           <div style={{width:30,height:30,background:"#f0c040",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🗺</div>
           <div>
             <div style={{fontWeight:"bold",fontSize:14,color:"#f0c040"}}>Geo Mapping System</div>
-            <div style={{fontSize:9,color:"#555"}}>Nigeria Geological Survey — Sequence 3</div>
+            <div style={{fontSize:9,color:"#555"}}>Nigeria Geological Survey — Sequence 4</div>
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <input value={projectName} onChange={function(e){setProjectName(e.target.value);}}
             placeholder="Study area name…"
             style={{background:"#1a1a3a",color:"#fff",border:"1px solid #3a3a6a",borderRadius:5,padding:"4px 8px",fontSize:11,width:160}}/>
-          <button onClick={function(){openMap("map2");}}
-            style={Object.assign({},btnBase,{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"5px 10px",fontSize:10})}>
-            📄 MAP 2
-          </button>
-          <button onClick={function(){openMap("map3");}}
-            style={Object.assign({},btnBase,{background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"5px 10px",fontSize:10})}>
-            🪨 MAP 3
-          </button>
+          <button onClick={function(){openMap("map2");}} style={Object.assign({},btnBase,{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"5px 10px",fontSize:10})}>📄 MAP 2</button>
+          <button onClick={function(){openMap("map3");}} style={Object.assign({},btnBase,{background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"5px 10px",fontSize:10})}>🪨 MAP 3</button>
           <div style={{background:"#1a3a1a",border:"1px solid #27ae60",borderRadius:10,padding:"2px 8px",fontSize:9,color:"#27ae60"}}>● Live</div>
           <div style={{background:"#1a1a3a",border:"1px solid #3a3a6a",borderRadius:10,padding:"2px 8px",fontSize:9,color:"#888"}}>z{zoom}</div>
         </div>
@@ -989,11 +875,29 @@ export default function GeoMappingSystem() {
 
             {tab==="output"&&(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
+
+                {/* DPI selector */}
+                <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
+                  <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:8}}>EXPORT QUALITY</div>
+                  {DPI_OPTIONS.map(function(opt){
+                    var active=exportDPI===opt.dpi;
+                    return(
+                      <div key={opt.dpi} onClick={function(){setExportDPI(opt.dpi);}}
+                        style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                          background:active?"#1a3a1a":"#0f0f2a",
+                          border:"1px solid "+(active?"#27ae60":"#2a2a5a"),
+                          borderRadius:5,padding:"6px 8px",marginBottom:4,cursor:"pointer"}}>
+                        <span style={{fontSize:11,fontWeight:"bold",color:active?"#27ae60":"#aaa"}}>{opt.label}</span>
+                        <span style={{fontSize:9,color:active?"#8fbb8f":"#444"}}>{opt.desc}</span>
+                        {active&&<span style={{fontSize:9,color:"#27ae60"}}>✓</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Generate */}
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:8}}>GENERATE MAPS</div>
-                  <div style={{fontSize:10,color:"#666",marginBottom:10,lineHeight:1.6}}>
-                    Type your study area name in the header, then generate either map. Each opens in a new tab with Print and PNG download options.
-                  </div>
                   <button onClick={function(){openMap("map2");}}
                     style={Object.assign({},btnBase,{width:"100%",background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"9px",fontSize:11,marginBottom:8})}>
                     📄 Generate MAP 2<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>Sample Location Map</span>
@@ -1002,30 +906,27 @@ export default function GeoMappingSystem() {
                     style={Object.assign({},btnBase,{width:"100%",background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"9px",fontSize:11,marginBottom:12})}>
                     🪨 Generate MAP 3<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>Geological Map</span>
                   </button>
+
+                  {/* Quick export */}
                   <div style={{fontSize:10,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>QUICK EXPORT</div>
                   {[
-                    {label:"⬇ MAP 2 — PNG 300dpi", type:"map2", fmt:"png"},
-                    {label:"⬇ MAP 2 — PDF A3",     type:"map2", fmt:"pdf"},
-                    {label:"⬇ MAP 3 — PNG 300dpi", type:"map3", fmt:"png"},
-                    {label:"⬇ MAP 3 — PDF A3",     type:"map3", fmt:"pdf"},
+                    {label:"⬇ MAP 2 — PNG "+exportDPI+"dpi", type:"map2", fmt:"png"},
+                    {label:"⬇ MAP 2 — PDF A3",                type:"map2", fmt:"pdf"},
+                    {label:"⬇ MAP 3 — PNG "+exportDPI+"dpi", type:"map3", fmt:"png"},
+                    {label:"⬇ MAP 3 — PDF A3",                type:"map3", fmt:"pdf"},
                   ].map(function(item,i){
                     return(
-                      <button key={i} onClick={function(){openMapExport(item.type, item.fmt);}}
+                      <button key={i} onClick={function(){openMapExport(item.type,item.fmt);}}
                         style={Object.assign({},btnBase,{width:"100%",background:"#0f1f2f",color:"#7ab",border:"1px solid #2a4a6a",padding:"7px",fontSize:10,marginBottom:4})}>
                         {item.label}
                       </button>
                     );
                   })}
                 </div>
+
                 <div style={{background:"#0f0f1e",border:"1px dashed #2a2a4a",borderRadius:8,padding:10}}>
-                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>OUTPUT INCLUDES</div>
-                  {["OSM base map","DMS coordinate grid","North arrow","Scale bar","Legend","Title block","Print / PNG export"].map(function(item,i){
-                    return <div key={i} style={{fontSize:10,color:"#27ae60",marginBottom:2}}>✓ {item}</div>;
-                  })}
-                </div>
-                <div style={{background:"#0f0f1e",border:"1px dashed #2a2a4a",borderRadius:8,padding:10}}>
-                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 4</div>
-                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>300dpi export system — high-resolution PNG and PDF output.</div>
+                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 5</div>
+                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>GeoJSON, KML and CSV export formats.</div>
                 </div>
               </div>
             )}
@@ -1035,7 +936,7 @@ export default function GeoMappingSystem() {
       </div>
 
       <div style={{background:"#0a0a1e",borderTop:"1px solid #2a2a5a",padding:"4px 14px",display:"flex",justifyContent:"space-between",flexShrink:0}}>
-        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v0.3 — Sequence 3</span>
+        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v0.4 — Sequence 4</span>
         <span style={{fontSize:9,color:"#333"}}>Nigeria · WGS84 · OpenStreetMap</span>
       </div>
     </div>
