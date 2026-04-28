@@ -66,11 +66,11 @@ export default function GeoMappingSystem() {
   var [tiles,setTiles]=useState([]);
   var [tick,setTick]=useState(0);
   var [size,setSize]=useState({w:800,h:560});
-  var [tab,setTab]=useState("draw"); // draw | data | info
+  var [tab,setTab]=useState("draw");
 
   // Feature state
   var [towns,setTowns]=useState([]);
-  var [roads,setRoads]=useState([]); // {type,points,active}
+  var [roads,setRoads]=useState([]);
   var [rivers,setRivers]=useState([]);
   var [samples,setSamples]=useState([]);
   var [geoZones,setGeoZones]=useState([]);
@@ -81,11 +81,7 @@ export default function GeoMappingSystem() {
   var [activeGeo,setActiveGeo]=useState(null);
   var [mousePos,setMousePos]=useState(null);
 
-  // Selected feature for editing
-  // eslint-disable-next-line no-unused-vars
-  const [selected, setSelected] = useState(...);
-
-  // Form s tate
+  // Form state
   var [townForm,setTownForm]=useState({name:""});
   var [sampleForm,setSampleForm]=useState({id:"",rock:"Shale",notes:""});
   var [geoRock,setGeoRock]=useState("Shale");
@@ -175,7 +171,6 @@ export default function GeoMappingSystem() {
       if(z2.points.length>2)ctx.closePath();
       ctx.globalAlpha=0.55; ctx.fillStyle=ROCK_COLORS[z2.rock]||"#aaa"; ctx.fill();
       ctx.globalAlpha=1; ctx.strokeStyle=ROCK_COLORS[z2.rock]||"#aaa"; ctx.lineWidth=2; ctx.stroke();
-      // label centroid
       if(z2.points.length>2){
         var cx2=z2.points.reduce(function(s,pt){return s+pt.lon;},0)/z2.points.length;
         var cy2=z2.points.reduce(function(s,pt){return s+pt.lat;},0)/z2.points.length;
@@ -198,7 +193,6 @@ export default function GeoMappingSystem() {
         var pp=p(pt.lat,pt.lon);
         ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(pp.x,pp.y,4,0,Math.PI*2); ctx.fill();
       });
-      // close hint
       if(activeGeo.points.length>2){
         var fp=p(activeGeo.points[0].lat,activeGeo.points[0].lon);
         ctx.strokeStyle="#27ae60"; ctx.lineWidth=2;
@@ -217,7 +211,6 @@ export default function GeoMappingSystem() {
       if(road===activeRoad&&mousePos){ var mp=p(mousePos.lat,mousePos.lon); ctx.lineTo(mp.x,mp.y); }
       ctx.strokeStyle=road.type==="major"?"#e07030":"#888";
       ctx.lineWidth=road.type==="major"?3:1.5; ctx.stroke();
-      // nodes
       if(road===activeRoad){
         road.points.forEach(function(pt){
           var pp=p(pt.lat,pt.lon);
@@ -306,11 +299,6 @@ export default function GeoMappingSystem() {
     var r=canvasRef.current.getBoundingClientRect();
     return px2ll((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height),center.lat,center.lon,zoom,W,H);
   }
-  // eslint-disable-next-line no-unused-vars
-  const getPX = ...
-    var r=canvasRef.current.getBoundingClientRect();
-    return {x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)};
-  }
 
   // ── CLICK HANDLER ──────────────────────────────────────────────────────
   function handleClick(e){
@@ -365,7 +353,6 @@ export default function GeoMappingSystem() {
         var zone={rock:geoRock,points:[ll]};
         setActiveGeo(zone);
       } else {
-        // Check if closing polygon (click near first point)
         if(activeGeo.points.length>2){
           var fp=ll2px(activeGeo.points[0].lat,activeGeo.points[0].lon,center.lat,center.lon,zoom,W,H);
           var cp=ll2px(ll.lat,ll.lon,center.lat,center.lon,zoom,W,H);
@@ -436,9 +423,7 @@ export default function GeoMappingSystem() {
     setActiveRoad(null); setActiveRiver(null); setActiveGeo(null);
   }
 
-  // ── COUNTS ─────────────────────────────────────────────────────────────
   var totalNodes=roads.reduce(function(s,r){return s+r.points.length;},0)+rivers.reduce(function(s,r){return s+r.points.length;},0);
-
   var btnBase={border:"none",borderRadius:6,cursor:"pointer",fontFamily:"sans-serif",fontWeight:"bold"};
 
   return (
@@ -492,7 +477,6 @@ export default function GeoMappingSystem() {
             onWheel={onWheel}
             style={{display:"block",width:"100%",height:"100%",cursor:mode==="pan"?(dragRef.current?"grabbing":"grab"):"crosshair"}}
           />
-          {/* Drawing hints */}
           {(mode==="road-major"||mode==="road-minor")&&(
             <div style={{position:"absolute",bottom:40,left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,0.75)",color:"#fff",borderRadius:8,padding:"6px 14px",fontSize:11,display:"flex",gap:8}}>
               <span>Click to add nodes</span>
@@ -518,8 +502,6 @@ export default function GeoMappingSystem() {
 
         {/* Sidebar */}
         <div style={{width:240,background:"#0a0a1e",borderLeft:"1px solid #2a2a5a",display:"flex",flexDirection:"column",flexShrink:0}}>
-
-          {/* Tabs */}
           <div style={{display:"flex",borderBottom:"1px solid #2a2a5a"}}>
             {["draw","data","info"].map(function(t){
               return(
@@ -533,10 +515,8 @@ export default function GeoMappingSystem() {
 
           <div style={{flex:1,overflowY:"auto",padding:12}}>
 
-            {/* DRAW TAB */}
             {tab==="draw"&&(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-
                 {mode==="town"&&(
                   <div style={{background:"#12122e",border:"1px solid #1a3a5a",borderRadius:8,padding:10}}>
                     <div style={{fontSize:11,color:"#4a9adf",fontWeight:"bold",marginBottom:8}}>🏘 PLACE TOWN</div>
@@ -547,7 +527,6 @@ export default function GeoMappingSystem() {
                     <div style={{fontSize:10,color:"#555",marginTop:6}}>Click anywhere on the map to place</div>
                   </div>
                 )}
-
                 {(mode==="road-major"||mode==="road-minor")&&(
                   <div style={{background:"#12122e",border:"1px solid #5a2a00",borderRadius:8,padding:10}}>
                     <div style={{fontSize:11,color:"#e07030",fontWeight:"bold",marginBottom:6}}>{mode==="road-major"?"🟠 MAJOR ROAD":"⬛ MINOR ROAD"}</div>
@@ -559,7 +538,6 @@ export default function GeoMappingSystem() {
                     {activeRoad&&<div style={{marginTop:8,fontSize:10,color:"#f0c040"}}>{activeRoad.points.length} nodes placed</div>}
                   </div>
                 )}
-
                 {mode==="river"&&(
                   <div style={{background:"#12122e",border:"1px solid #003a5a",borderRadius:8,padding:10}}>
                     <div style={{fontSize:11,color:"#2980d9",fontWeight:"bold",marginBottom:6}}>🌊 DRAW RIVER</div>
@@ -570,7 +548,6 @@ export default function GeoMappingSystem() {
                     {activeRiver&&<div style={{marginTop:8,fontSize:10,color:"#f0c040"}}>{activeRiver.points.length} nodes placed</div>}
                   </div>
                 )}
-
                 {mode==="sample"&&(
                   <div style={{background:"#12122e",border:"1px solid #5a1a1a",borderRadius:8,padding:10}}>
                     <div style={{fontSize:11,color:"#e74c3c",fontWeight:"bold",marginBottom:8}}>🔺 PLACE SAMPLE</div>
@@ -590,7 +567,6 @@ export default function GeoMappingSystem() {
                     <div style={{fontSize:10,color:"#555",marginTop:6}}>Click map to place sample</div>
                   </div>
                 )}
-
                 {mode==="geology"&&(
                   <div style={{background:"#12122e",border:"1px solid #2a1a5a",borderRadius:8,padding:10}}>
                     <div style={{fontSize:11,color:"#9b59b6",fontWeight:"bold",marginBottom:8}}>🪨 GEOLOGY ZONE</div>
@@ -611,13 +587,11 @@ export default function GeoMappingSystem() {
                     {activeGeo&&<div style={{marginTop:8,fontSize:10,color:"#f0c040"}}>{activeGeo.points.length} nodes · {activeGeo.points.length>2?"click green circle or Finish to close":"need "+(3-activeGeo.points.length)+" more"}</div>}
                   </div>
                 )}
-
                 {mode==="pan"&&(
                   <div style={{fontSize:11,color:"#555",textAlign:"center",padding:20,lineHeight:1.8}}>
                     Select a drawing tool above to start placing features on the map.
                   </div>
                 )}
-
                 <button onClick={clearAll}
                   style={Object.assign({},btnBase,{background:"#3a1a1a",color:"#e74c3c",border:"1px solid #e74c3c",padding:"7px",fontSize:10,width:"100%"})}>
                   🗑 Clear All Features
@@ -625,7 +599,6 @@ export default function GeoMappingSystem() {
               </div>
             )}
 
-            {/* DATA TAB */}
             {tab==="data"&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {[
@@ -644,7 +617,6 @@ export default function GeoMappingSystem() {
                     </div>
                   );
                 })}
-
                 {samples.length>0&&(
                   <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10,marginTop:4}}>
                     <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>SAMPLE LIST</div>
@@ -661,7 +633,6 @@ export default function GeoMappingSystem() {
               </div>
             )}
 
-            {/* INFO TAB */}
             {tab==="info"&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
