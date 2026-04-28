@@ -46,8 +46,8 @@ function dist(p1,p2){return Math.sqrt(Math.pow(p1.x-p2.x,2)+Math.pow(p1.y-p2.y,2
 // ── MAP OUTPUT RENDERER ────────────────────────────────────────────────────
 function renderMap(type, data, projectName) {
   // type: "map2" | "map3"
-  const W = 1123, H = 794; // A4 landscape at 96dpi (scale up for quality)
-  const MARGIN = { top: 60, left: 60, right: 200, bottom: 50 };
+  const W = 1587, H = 1123; // A3 landscape at 96dpi (420x297mm)
+  const MARGIN = { top: 70, left: 70, right: 220, bottom: 60 };
   const MAP_W = W - MARGIN.left - MARGIN.right;
   const MAP_H = H - MARGIN.top - MARGIN.bottom;
 
@@ -65,13 +65,19 @@ function renderMap(type, data, projectName) {
 <title>${type === "map2" ? "MAP 2 — Sample Location Map" : "MAP 3 — Geological Map"} | ${projectName}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #f0f0f0; font-family: "Times New Roman", serif; }
+  body { background: #e8e8e8; font-family: "Times New Roman", serif; }
   .page { width: ${W}px; margin: 20px auto; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,0.18); position: relative; }
   canvas { display: block; }
-  .controls { width: ${W}px; margin: 0 auto 0; padding: 12px; background: #222; display: flex; gap: 10px; align-items: center; }
-  .controls button { background: #f0c040; border: none; padding: 8px 18px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; }
-  .controls button:hover { background: #e0b030; }
-  .controls span { color: #aaa; font-size: 12px; font-family: sans-serif; }
+  .controls { width: ${W}px; margin: 0 auto; padding: 12px; background: #f5f5f5; border: 1px solid #ccc; display: flex; gap: 10px; align-items: center; }
+  .controls button { background: #2c5f8a; color: #fff; border: none; padding: 8px 18px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; font-family: sans-serif; }
+  .controls button:hover { background: #1a4a70; }
+  .controls span { color: #666; font-size: 12px; font-family: sans-serif; }
+  @media print {
+    body { background: #fff; }
+    .controls { display: none; }
+    .page { margin: 0; box-shadow: none; }
+    @page { size: A3 landscape; margin: 0; }
+  }
 </style>
 </head>
 <body>
@@ -137,6 +143,8 @@ function loadTile(z,x,y,cb){
 var tilesLoaded=0, tilesTotal=0;
 function drawAll(){
   ctx.clearRect(0,0,W,H);
+  // White page background
+  ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,W,H);
 
   // ── OUTER BORDER ──
   ctx.strokeStyle="#000"; ctx.lineWidth=3;
@@ -165,8 +173,8 @@ function drawAll(){
       var rx=((tx%max)+max)%max;
       var img=tileCache[zoom+"/"+rx+"/"+ty];
       var pt=ll2px(tile2lat(ty,zoom),tile2lon(ox,zoom));
-      if(img){ctx.globalAlpha=mapType==="map3"?0.25:0.45;ctx.drawImage(img,Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);ctx.globalAlpha=1;}
-      else{ctx.fillStyle="#e8e8e8";ctx.fillRect(Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);}
+      if(img){ctx.globalAlpha=mapType==="map3"?0.35:0.65;ctx.drawImage(img,Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);ctx.globalAlpha=1;}
+      else{ctx.fillStyle="#f5f5f5";ctx.fillRect(Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);}
     }
   }
 
