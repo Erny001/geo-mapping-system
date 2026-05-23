@@ -6,8 +6,8 @@ const NIGERIA_ZOOM = 6;
 const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const TILE_SIZE = 256;
 const ROCK_COLORS = {
-  Shale: "#6b6b2a", Limestone: "#00bcd4", Sandstone: "#e8e04a",
-  Clay: "#9c27b0", Siltstone: "#f4a460", Marl: "#b8860b", Gravel: "#a0a0a0",
+  Shale: "#6b6b2a", Limestone: "#00e5ff", Sandstone: "#f9e040",
+  Clay: "#cc00ff", Siltstone: "#ffaa55", Marl: "#d4a017", Gravel: "#b0b0b0",
 };
 const ROCK_TYPES = Object.keys(ROCK_COLORS);
 const GEO_PERIODS = ["Precambrian","Cambrian","Ordovician","Silurian","Devonian","Carboniferous","Permian","Triassic","Jurassic","Cretaceous","Paleogene","Neogene","Quaternary","Unknown"];
@@ -40,7 +40,7 @@ function px2ll(px,py,clat,clon,z,W,H){
 }
 function toDMS(deg,isLat){
   var d=Math.abs(deg),dd=Math.floor(d),mm=Math.floor((d-dd)*60),ss=Math.round(((d-dd)*60-mm)*60);
-  return dd+"\u00b0"+mm+"'"+ss+'"'+(isLat?(deg>=0?"N":"S"):(deg>=0?"E":"W"));
+  return dd+"°"+mm+"'"+ss+'"'+(isLat?(deg>=0?"N":"S"):(deg>=0?"E":"W"));
 }
 function loadTile(z,x,y,cb){
   var k=z+"/"+x+"/"+y;
@@ -122,7 +122,7 @@ function CoordInput({onPlace,label}){
     if(lat<-90||lat>90||lon<-180||lon>180){setErr("Out of range.");return;}
     setErr("");onPlace({lat,lon});setLatStr("");setLonStr("");
   }
-  var ph=fmt==="dec"?{lat:"e.g. 5.5033",lon:"e.g. 7.7591"}:{lat:'e.g. 5°30\'12"N',lon:'e.g. 7°45\'33"E'};
+  var ph=fmt==="dec"?{lat:"e.g. 5.5033",lon:"e.g. 7.7591"}:{lat:"e.g. 5°30'12\"N",lon:"e.g. 7°45'33\"E"};
   return(
     <div style={{background:"#0d1a2a",border:"1px solid #2a4a6a",borderRadius:7,padding:9,marginTop:6}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -136,12 +136,11 @@ function CoordInput({onPlace,label}){
         <div style={{flex:1}}><div style={{fontSize:9,color:"#666",marginBottom:2}}>Longitude</div><input value={lonStr} onChange={function(e){setLonStr(e.target.value);setErr("");}} onKeyDown={function(e){if(e.key==="Enter")handle();}} placeholder={ph.lon} style={Object.assign({},INP,{marginBottom:0})}/></div>
       </div>
       {err&&<div style={{fontSize:9,color:"#e74c3c",marginBottom:4}}>{err}</div>}
-      <button onClick={handle} style={{width:"100%",background:"#1a4a2a",color:"#27ae60",border:"1px solid #27ae60",borderRadius:4,padding:"5px",fontSize:10,cursor:"pointer",fontWeight:"bold"}}>✓ Place on Map & Pan</button>
+      <button onClick={handle} style={{width:"100%",background:"#1a4a2a",color:"#27ae60",border:"1px solid #27ae60",borderRadius:4,padding:"5px",fontSize:10,cursor:"pointer",fontWeight:"bold"}}>✓ Place on Map &amp; Pan</button>
     </div>
   );
 }
 
-// ── AUTH SCREEN ────────────────────────────────────────────────────────────────
 function AuthScreen(){
   var [mode,setMode]=useState("login");
   var [email,setEmail]=useState("");
@@ -183,16 +182,13 @@ function AuthScreen(){
   );
 }
 
-// ── PROJECT DASHBOARD ──────────────────────────────────────────────────────────
 function Dashboard({user,onOpen,onSignOut}){
   var [projects,setProjects]=useState([]);
   var [loading,setLoading]=useState(true);
   var [creating,setCreating]=useState(false);
   var [form,setForm]=useState({name:"",studyArea:"",lga:"",state:"Akwa Ibom"});
   var [deleting,setDeleting]=useState(null);
-
   useEffect(function(){loadProjects();},[]);
-
   async function loadProjects(){
     setLoading(true);
     var {data,error}=await supabase.from("projects").select("*").order("updated_at",{ascending:false});
@@ -201,12 +197,7 @@ function Dashboard({user,onOpen,onSignOut}){
   }
   async function createProject(){
     var name=form.name.trim()||form.studyArea.trim()||"Untitled Project";
-    var {data,error}=await supabase.from("projects").insert({
-      user_id:user.id,name,
-      study_area:form.studyArea.trim(),
-      lga:form.lga.trim(),
-      state:form.state
-    }).select().single();
+    var {data,error}=await supabase.from("projects").insert({user_id:user.id,name,study_area:form.studyArea.trim(),lga:form.lga.trim(),state:form.state}).select().single();
     if(!error&&data){setCreating(false);setForm({name:"",studyArea:"",lga:"",state:"Akwa Ibom"});onOpen(data);}
   }
   async function deleteProject(id){
@@ -214,7 +205,6 @@ function Dashboard({user,onOpen,onSignOut}){
     setDeleting(null);setProjects(function(p){return p.filter(function(x){return x.id!==id;});});
   }
   function fmt(ts){var d=new Date(ts),now=new Date(),diff=Math.floor((now-d)/1000);if(diff<60)return "just now";if(diff<3600)return Math.floor(diff/60)+"m ago";if(diff<86400)return Math.floor(diff/3600)+"h ago";return d.toLocaleDateString();}
-
   return(
     <div style={{background:"#0d0d1f",height:"100vh",fontFamily:"sans-serif",color:"#eee",display:"flex",flexDirection:"column"}}>
       <div style={{background:"#12122e",borderBottom:"1px solid #2a2a5a",padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -233,25 +223,11 @@ function Dashboard({user,onOpen,onSignOut}){
           <div style={{background:"#12122e",border:"1px solid #27ae60",borderRadius:10,padding:16,marginBottom:16}}>
             <div style={{fontSize:11,color:"#27ae60",fontWeight:"bold",marginBottom:12}}>New Project</div>
             <div style={{display:"flex",gap:8,marginBottom:8}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Study Area Name *</div>
-                <input value={form.studyArea} onChange={function(e){setForm(function(f){return Object.assign({},f,{studyArea:e.target.value});});}} placeholder="e.g. Ogu Itumbuoso" autoFocus style={Object.assign({},INP,{marginBottom:0})}/>
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>LGA</div>
-                <input value={form.lga} onChange={function(e){setForm(function(f){return Object.assign({},f,{lga:e.target.value});});}} placeholder="e.g. Itu" style={Object.assign({},INP,{marginBottom:0})}/>
-              </div>
+              <div style={{flex:1}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Study Area Name *</div><input value={form.studyArea} onChange={function(e){setForm(function(f){return Object.assign({},f,{studyArea:e.target.value});});}} placeholder="e.g. Ogu Itumbuoso" autoFocus style={Object.assign({},INP,{marginBottom:0})}/></div>
+              <div style={{flex:1}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>LGA</div><input value={form.lga} onChange={function(e){setForm(function(f){return Object.assign({},f,{lga:e.target.value});});}} placeholder="e.g. Itu" style={Object.assign({},INP,{marginBottom:0})}/></div>
             </div>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>State</div>
-              <select value={form.state} onChange={function(e){setForm(function(f){return Object.assign({},f,{state:e.target.value});});}} style={SEL}>
-                {NIGERIA_STATES.map(function(s){return <option key={s}>{s}</option>;})}
-              </select>
-            </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Project Name (optional — defaults to Study Area name)</div>
-              <input value={form.name} onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}} onKeyDown={function(e){if(e.key==="Enter")createProject();}} placeholder="e.g. Ogu-Itumbuoso Geological Survey 2025" style={Object.assign({},INP,{marginBottom:0})}/>
-            </div>
+            <div style={{marginBottom:8}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>State</div><select value={form.state} onChange={function(e){setForm(function(f){return Object.assign({},f,{state:e.target.value});});}} style={SEL}>{NIGERIA_STATES.map(function(s){return <option key={s}>{s}</option>;})}</select></div>
+            <div style={{marginBottom:12}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Project Name (optional)</div><input value={form.name} onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}} onKeyDown={function(e){if(e.key==="Enter")createProject();}} placeholder="e.g. Ogu-Itumbuoso Geological Survey 2025" style={Object.assign({},INP,{marginBottom:0})}/></div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={createProject} style={{flex:1,background:"#27ae60",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:11,fontWeight:"bold",cursor:"pointer"}}>✓ Create Project</button>
               <button onClick={function(){setCreating(false);}} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"8px 14px",fontSize:11,cursor:"pointer"}}>Cancel</button>
@@ -260,36 +236,31 @@ function Dashboard({user,onOpen,onSignOut}){
         )}
         {loading?(<div style={{textAlign:"center",padding:40,color:"#555"}}>Loading projects…</div>)
         :projects.length===0?(<div style={{textAlign:"center",padding:60,color:"#333"}}><div style={{fontSize:32,marginBottom:12}}>🗺</div><div style={{fontSize:14,color:"#555",marginBottom:8}}>No projects yet</div><div style={{fontSize:11,color:"#333"}}>Create your first project to get started</div></div>)
-        :(
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {projects.map(function(p){return(
-              <div key={p.id} style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:10,padding:16,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={function(){if(deleting!==p.id)onOpen(p);}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:"bold",color:"#f0c040",marginBottom:2}}>{p.name||p.study_area||"Untitled"}</div>
-                  {p.study_area&&<div style={{fontSize:10,color:"#7ab",marginBottom:2}}>{p.study_area}{p.lga?" · "+p.lga:""}{p.state?" · "+p.state+" State":""}</div>}
-                  <div style={{fontSize:10,color:"#555"}}>Last saved {fmt(p.updated_at)}</div>
+        :(<div style={{display:"flex",flexDirection:"column",gap:10}}>{projects.map(function(p){return(
+          <div key={p.id} style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:10,padding:16,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={function(){if(deleting!==p.id)onOpen(p);}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:"bold",color:"#f0c040",marginBottom:2}}>{p.name||p.study_area||"Untitled"}</div>
+              {p.study_area&&<div style={{fontSize:10,color:"#7ab",marginBottom:2}}>{p.study_area}{p.lga?" · "+p.lga:""}{p.state?" · "+p.state+" State":""}</div>}
+              <div style={{fontSize:10,color:"#555"}}>Last saved {fmt(p.updated_at)}</div>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <button onClick={function(e){e.stopPropagation();onOpen(p);}} style={{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",borderRadius:6,padding:"6px 14px",fontSize:10,fontWeight:"bold",cursor:"pointer"}}>Open →</button>
+              {deleting===p.id?(
+                <div style={{display:"flex",gap:4}}>
+                  <button onClick={function(e){e.stopPropagation();deleteProject(p.id);}} style={{background:"#3a0a0a",color:"#e74c3c",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 10px",fontSize:10,cursor:"pointer",fontWeight:"bold"}}>Delete</button>
+                  <button onClick={function(e){e.stopPropagation();setDeleting(null);}} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"6px 8px",fontSize:10,cursor:"pointer"}}>✕</button>
                 </div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <button onClick={function(e){e.stopPropagation();onOpen(p);}} style={{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",borderRadius:6,padding:"6px 14px",fontSize:10,fontWeight:"bold",cursor:"pointer"}}>Open →</button>
-                  {deleting===p.id?(
-                    <div style={{display:"flex",gap:4}}>
-                      <button onClick={function(e){e.stopPropagation();deleteProject(p.id);}} style={{background:"#3a0a0a",color:"#e74c3c",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 10px",fontSize:10,cursor:"pointer",fontWeight:"bold"}}>Delete</button>
-                      <button onClick={function(e){e.stopPropagation();setDeleting(null);}} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"6px 8px",fontSize:10,cursor:"pointer"}}>✕</button>
-                    </div>
-                  ):(
-                    <button onClick={function(e){e.stopPropagation();setDeleting(p.id);}} style={{background:"transparent",color:"#3a3a6a",border:"none",borderRadius:6,padding:"6px 8px",fontSize:12,cursor:"pointer"}}>🗑</button>
-                  )}
-                </div>
-              </div>
-            );})}
+              ):(
+                <button onClick={function(e){e.stopPropagation();setDeleting(p.id);}} style={{background:"transparent",color:"#3a3a6a",border:"none",borderRadius:6,padding:"6px 8px",fontSize:12,cursor:"pointer"}}>🗑</button>
+              )}
+            </div>
           </div>
-        )}
+        );})}</div>)}
       </div>
     </div>
   );
 }
 
-// ── EDIT PANELS ────────────────────────────────────────────────────────────────
 function TownEditPanel({town,onSave,onDelete,onDeselect}){
   var [f,setF]=useState(Object.assign({name:"",townType:"Settlement"},town));
   function upd(k,v){setF(function(p){return Object.assign({},p,{[k]:v});});}
@@ -415,7 +386,6 @@ function ValidationBanner({errors}){
   return(<div style={{background:"#3a0a0a",border:"1px solid #e74c3c",borderRadius:6,padding:"8px 10px",marginBottom:8}}><div style={{fontSize:10,color:"#e74c3c",fontWeight:"bold",marginBottom:4}}>⚠ VALIDATION WARNINGS</div>{errors.map(function(e,i){return <div key={i} style={{fontSize:9,color:"#ffaaaa",marginBottom:2}}>• {e}</div>;})}</div>);
 }
 
-// ── EXPORT FUNCTIONS ───────────────────────────────────────────────────────────
 function exportGeoJSON(towns,roads,rivers,samples,geoZones,projectName){
   var features=[];
   towns.forEach(function(t){features.push({type:"Feature",geometry:{type:"Point",coordinates:[t.lon,t.lat]},properties:{type:"town",name:t.name||"",settlementType:t.townType||"Settlement"}});});
@@ -452,61 +422,133 @@ function exportCSV(samples,projectName){
   setTimeout(function(){URL.revokeObjectURL(url);},1000);
 }
 
-// ── MAP RENDERER ───────────────────────────────────────────────────────────────
+
+
+// ── MAP RENDERER — Seq 7.1 ────────────────────────────────────────────────────
 function renderMap(type, data, meta, exportDPI, pageSize){
   exportDPI = exportDPI||300;
-  pageSize = pageSize||"A3";
+  pageSize  = pageSize||"A3";
 
-  // Page dimensions in px at 96dpi screen resolution
-  // A3 portrait: 297×420mm = 1123×1587px
-  // A2 portrait: 420×594mm = 1587×2245px
+  // ── Page dimensions ──────────────────────────────────────────────────────────
   var PW = pageSize==="A2" ? 1587 : 1123;
   var PH = pageSize==="A2" ? 2245 : 1587;
 
-  // Layout constants
-  var BORDER_OUTER = 6;  // thick outer border
-  var BORDER_INNER = 2;  // thin inner border
-  var BORDER_GAP   = 8;  // gap between outer and inner border
-  var PAD          = 20; // padding inside inner border
+  var BORDER_OUTER = 6;
+  var BORDER_INNER = 2;
+  var BORDER_GAP   = 8;
+  var PAD          = 20;
+  var RIGHT_W      = Math.round(PW * 0.26);
+  var BELOW_H      = 40;  // space below map frame for scale bar
 
-  // Right panel width (inset + legend + title block)
-  var RIGHT_W = Math.round(PW * 0.28);
-
-  // Map frame: left side of page
   var MAP_X = BORDER_OUTER + BORDER_GAP + BORDER_INNER + PAD;
-  var MAP_Y = BORDER_OUTER + BORDER_GAP + BORDER_INNER + PAD + 30; // +30 for coordinate labels top
+  var MAP_Y = BORDER_OUTER + BORDER_GAP + BORDER_INNER + PAD + 30;
   var MAP_W = PW - RIGHT_W - MAP_X - 10;
 
-  // Cross-section height (geologic map only)
-  var CS_H = type==="geo" ? Math.round(PH * 0.14) : 0;
+  var CS_H   = type==="geo" ? Math.round(PH * 0.13) : 0;
+  var CS_GAP = type==="geo" ? 52 : 0;
 
-  // Map height
-  var MAP_H = PH - MAP_Y - PAD - CS_H - (CS_H>0?40:20) - BORDER_OUTER - BORDER_GAP - BORDER_INNER;
+  var MAP_H = PH - MAP_Y - BELOW_H - CS_H - CS_GAP
+              - BORDER_OUTER - BORDER_GAP - BORDER_INNER - PAD;
 
   var {towns,roads,rivers,samples,geoZones,center,zoom} = data;
   var {studyArea,lga,state} = meta;
 
-  // Build title strings
+  // ── Vivid geology colors ─────────────────────────────────────────────────────
+  var RCOLORS = {
+    Shale:"#8b8b2a", Limestone:"#00bcd4", Sandstone:"#e8e04a",
+    Clay:"#9c27b0",  Siltstone:"#f4a460", Marl:"#d4a017", Gravel:"#c8c8c8"
+  };
+
+  // ── Map titles ───────────────────────────────────────────────────────────────
+  var areaLabel = (studyArea||"STUDY AREA").toUpperCase()+" AND ENVIRONS";
   var mapTitle = type==="sample"
-    ? "SAMPLE LOCATION MAP OF "+(studyArea||"STUDY AREA").toUpperCase()
-    : "GEOLOGIC MAP OF "+(studyArea||"STUDY AREA").toUpperCase();
-  var mapSubtitle = "IN "+(lga||"").toUpperCase()+(lga&&state?", ":"")+((state||"")+" STATE").toUpperCase();
-  var filename = (type==="sample"?"SampleMap":"GeologicMap")+"_"+(studyArea||"map").replace(/\s+/g,"_");
+    ? "MAP 2: SAMPLE LOCATION MAP OF "+areaLabel
+    : "MAP 3: GEOLOGIC MAP OF "+areaLabel;
+  var mapSubtitle = "IN "+(lga?lga.toUpperCase()+", ":"")+(state||"").toUpperCase()+" STATE";
+  var filename = (type==="sample"?"SampleMap":"GeologicMap")
+                 +"_"+(studyArea||"map").replace(/\s+/g,"_");
 
-  // Compute bounding box of all features for A–B line and inset
+  // ── AUTO-ZOOM: tight bbox from all feature coordinates ───────────────────────
   var allLats=[], allLons=[];
-  [...towns,...samples].forEach(function(f){allLats.push(f.lat);allLons.push(f.lon);});
-  [...roads,...rivers].forEach(function(r){r.points.forEach(function(p){allLats.push(p.lat);allLons.push(p.lon);});});
+  towns.forEach(function(f){allLats.push(f.lat);allLons.push(f.lon);});
+  samples.forEach(function(f){allLats.push(f.lat);allLons.push(f.lon);});
+  roads.forEach(function(r){r.points.forEach(function(p){allLats.push(p.lat);allLons.push(p.lon);});});
+  rivers.forEach(function(r){r.points.forEach(function(p){allLats.push(p.lat);allLons.push(p.lon);});});
   geoZones.forEach(function(z){z.points.forEach(function(p){allLats.push(p.lat);allLons.push(p.lon);});});
-  var featMinLat=allLats.length?Math.min.apply(null,allLats):center.lat-0.1;
-  var featMaxLat=allLats.length?Math.max.apply(null,allLats):center.lat+0.1;
-  var featMinLon=allLons.length?Math.min.apply(null,allLons):center.lon-0.1;
-  var featMaxLon=allLons.length?Math.max.apply(null,allLons):center.lon+0.1;
 
-  // A–B line: west (min lon) to east (max lon) at mid latitude
-  var abLat = (featMinLat+featMaxLat)/2;
-  var abWestLon = featMinLon;
-  var abEastLon = featMaxLon;
+  var hasFeatures = allLats.length > 0;
+  var featMinLat = hasFeatures ? Math.min.apply(null,allLats) : center.lat-0.05;
+  var featMaxLat = hasFeatures ? Math.max.apply(null,allLats) : center.lat+0.05;
+  var featMinLon = hasFeatures ? Math.min.apply(null,allLons) : center.lon-0.05;
+  var featMaxLon = hasFeatures ? Math.max.apply(null,allLons) : center.lon+0.05;
+
+  var latSpan = Math.max(featMaxLat-featMinLat, 0.01);
+  var lonSpan = Math.max(featMaxLon-featMinLon, 0.01);
+  var padLat  = latSpan * 0.12;
+  var padLon  = lonSpan * 0.12;
+  var bboxMinLat = featMinLat - padLat;
+  var bboxMaxLat = featMaxLat + padLat;
+  var bboxMinLon = featMinLon - padLon;
+  var bboxMaxLon = featMaxLon + padLon;
+
+  var exportCenterLat = (bboxMinLat+bboxMaxLat)/2;
+  var exportCenterLon = (bboxMinLon+bboxMaxLon)/2;
+
+  function computeFitZoom(minLat,maxLat,minLon,maxLon,pixW,pixH){
+    for(var z=18;z>=1;z--){
+      var ws=256*Math.pow(2,z);
+      function ly(la){var s=Math.sin(la*Math.PI/180);return ws/(2*Math.PI)*(Math.PI-Math.log((1+s)/(1-s))/2);}
+      function lx(lo){return ws*(lo+180)/360;}
+      var pw=lx(maxLon)-lx(minLon);
+      var ph=ly(minLat)-ly(maxLat);
+      if(pw<=pixW*0.88&&ph<=pixH*0.88)return z;
+    }
+    return 1;
+  }
+  var exportZoom = computeFitZoom(bboxMinLat,bboxMaxLat,bboxMinLon,bboxMaxLon,MAP_W,MAP_H);
+
+  // A–B line through feature centroid, west→east of bbox
+  var abLat     = exportCenterLat;
+  var abWestLon = bboxMinLon;
+  var abEastLon = bboxMaxLon;
+
+  // ── DRAW_SMOOTH for exported HTML ────────────────────────────────────────────
+  var DRAW_SMOOTH_SRC = `function drawSmooth(ctx,pts){if(!pts||pts.length<2)return;ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);if(pts.length===2){ctx.lineTo(pts[1].x,pts[1].y);}else{for(var i=0;i<pts.length-1;i++){var cp1x=pts[i].x+(pts[i+1].x-pts[i].x)*0.4,cp1y=pts[i].y+(pts[i+1].y-pts[i].y)*0.4,cp2x=pts[i].x+(pts[i+1].x-pts[i].x)*0.6,cp2y=pts[i].y+(pts[i+1].y-pts[i].y)*0.6;if(i>0){cp1x=pts[i].x+(pts[i+1].x-pts[i-1].x)*0.2;cp1y=pts[i].y+(pts[i+1].y-pts[i-1].y)*0.2;}if(i<pts.length-2){cp2x=pts[i+1].x-(pts[i+2].x-pts[i].x)*0.2;cp2y=pts[i+1].y-(pts[i+2].y-pts[i].y)*0.2;}ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,pts[i+1].x,pts[i+1].y);}}}`;
+
+  // ── Per-state static outlines — accurate simplified boundaries ───────────────
+  // Akwa Ibom: traced from official boundary data [lon, lat]
+  var STATE_OUTLINES = {
+    "akwa ibom": [
+      [7.4983,4.4976],[7.5311,4.4654],[7.5614,4.4483],[7.5821,4.4285],
+      [7.6124,4.4102],[7.6502,4.3934],[7.6901,4.3791],[7.7215,4.3712],
+      [7.7613,4.3669],[7.8012,4.3701],[7.8398,4.3801],[7.8714,4.3967],
+      [7.9012,4.4201],[7.9298,4.4487],[7.9601,4.4812],[7.9912,4.5178],
+      [8.0187,4.5534],[8.0401,4.5887],[8.0598,4.6234],[8.0791,4.6598],
+      [8.0987,4.6987],[8.1123,4.7398],[8.1234,4.7812],[8.1312,4.8234],
+      [8.1398,4.8656],[8.1456,4.9087],[8.1487,4.9512],[8.1498,4.9934],
+      [8.1476,5.0345],[8.1412,5.0743],[8.1312,5.1123],[8.1167,5.1487],
+      [8.0987,5.1823],[8.0756,5.2134],[8.0487,5.2398],[8.0187,5.2623],
+      [7.9856,5.2801],[7.9498,5.2934],[7.9123,5.3023],[7.8734,5.3067],
+      [7.8334,5.3056],[7.7934,5.2989],[7.7545,5.2867],[7.7178,5.2689],
+      [7.6834,5.2456],[7.6523,5.2167],[7.6245,5.1834],[7.6001,5.1456],
+      [7.5789,5.1045],[7.5612,5.0612],[7.5467,5.0156],[7.5356,4.9689],
+      [7.5267,4.9212],[7.5201,4.8734],[7.5156,4.8245],[7.5123,4.7756],
+      [7.5098,4.7267],[7.5067,4.6778],[7.5023,4.6298],[7.4967,4.5823],
+      [7.4923,4.5356],[7.4912,4.4976],[7.4983,4.4976]
+    ],
+    "default": [
+      [7.4983,4.4976],[7.6502,4.3934],[7.8012,4.3701],[7.9912,4.5178],
+      [8.1234,4.7812],[8.1498,4.9934],[8.1167,5.1487],[7.9856,5.2801],
+      [7.8334,5.3056],[7.6834,5.2456],[7.5612,5.0612],[7.5156,4.8245],
+      [7.4983,4.4976]
+    ]
+  };
+
+  // Pick the right outline for the selected state
+  var stateKey = (meta.state||"akwa ibom").toLowerCase().trim()
+                  .replace(" state","").trim();
+  var SELECTED_OUTLINE = STATE_OUTLINES[stateKey] || STATE_OUTLINES["default"];
+  var AKS_OUTLINE_SRC = JSON.stringify(SELECTED_OUTLINE);
 
   var html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
@@ -515,10 +557,9 @@ function renderMap(type, data, meta, exportDPI, pageSize){
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:#d0d0d0;font-family:"Times New Roman",serif;display:flex;flex-direction:column;align-items:center;}
-.controls{width:${PW}px;padding:10px 14px;background:#2a2a2a;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:0;position:sticky;top:0;z-index:100;}
+.controls{width:${PW}px;padding:10px 14px;background:#2a2a2a;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:100;}
 .controls button{background:#2c5f8a;color:#fff;border:none;padding:7px 16px;border-radius:5px;font-weight:bold;cursor:pointer;font-size:12px;font-family:sans-serif;}
 .controls button:hover{background:#1a4a70;}
-.controls button.active{background:#27ae60;}
 .size-btn{background:#444!important;}
 .size-btn.active{background:#f0c040!important;color:#000!important;}
 .page{width:${PW}px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,0.3);margin:16px auto;}
@@ -532,32 +573,38 @@ canvas{display:block;}
   <button class="size-btn ${pageSize==="A2"?"active":""}" onclick="switchSize('A2')">A2</button>
   <span style="color:#888;font-family:sans-serif;font-size:11px;margin:0 8px;">|</span>
   <span style="color:#f0c040;font-family:sans-serif;font-weight:bold;font-size:12px;">EXPORT:</span>
-  <button onclick="doExport('png')">⬇ PNG</button>
-  <button onclick="doExport('jpeg')">⬇ JPEG</button>
-  <button onclick="doExport('pdf')">⬇ PDF</button>
-  <button onclick="window.print()">🖨 Print</button>
+  <button onclick="doExport('png')">&#11015; PNG</button>
+  <button onclick="doExport('jpeg')">&#11015; JPEG</button>
+  <button onclick="doExport('pdf')">&#11015; PDF</button>
+  <button onclick="window.print()">Print</button>
   <span style="color:#555;font-family:sans-serif;font-size:10px;margin-left:auto;">DPI: ${exportDPI}</span>
 </div>
 <div class="page"><canvas id="mapCanvas" width="${PW}" height="${PH}"></canvas></div>
 
 <script>
+// ── constants ────────────────────────────────────────────────────────────────
 var PW=${PW},PH=${PH},pageSize="${pageSize}";
 var MAP_X=${MAP_X},MAP_Y=${MAP_Y},MAP_W=${MAP_W},MAP_H=${MAP_H};
-var RIGHT_W=${RIGHT_W},CS_H=${CS_H};
+var RIGHT_W=${RIGHT_W},CS_H=${CS_H},CS_GAP=${CS_GAP},BELOW_H=${BELOW_H};
 var BORDER_OUTER=${BORDER_OUTER},BORDER_GAP=${BORDER_GAP},BORDER_INNER=${BORDER_INNER},PAD=${PAD};
-var center=${JSON.stringify(center)},zoom=${zoom};
+var exportCenter={lat:${exportCenterLat},lon:${exportCenterLon}},zoom=${exportZoom};
 var towns=${JSON.stringify(towns)},roads=${JSON.stringify(roads)},rivers=${JSON.stringify(rivers)};
 var samples=${JSON.stringify(samples)},geoZones=${JSON.stringify(geoZones)};
-var ROCK_COLORS=${JSON.stringify(ROCK_COLORS)};
+var ROCK_COLORS=${JSON.stringify(RCOLORS)};
 var mapType="${type}",mapTitle=${JSON.stringify(mapTitle)},mapSubtitle=${JSON.stringify(mapSubtitle)};
 var studyArea=${JSON.stringify(studyArea||"")},lga=${JSON.stringify(lga||"")},state=${JSON.stringify(state||"")};
 var filename=${JSON.stringify(filename)},exportDPI=${exportDPI},SCREEN_DPI=96;
-var featMinLat=${featMinLat},featMaxLat=${featMaxLat},featMinLon=${featMinLon},featMaxLon=${featMaxLon};
+var featMinLat=${featMinLat},featMaxLat=${featMaxLat};
+var featMinLon=${featMinLon},featMaxLon=${featMaxLon};
+var bboxMinLat=${bboxMinLat},bboxMaxLat=${bboxMaxLat};
+var bboxMinLon=${bboxMinLon},bboxMaxLon=${bboxMaxLon};
 var abLat=${abLat},abWestLon=${abWestLon},abEastLon=${abEastLon};
+var AKS_OUTLINE=${AKS_OUTLINE_SRC};
 var TILE_SIZE=256,tileCache={};
 var canvas=document.getElementById("mapCanvas"),ctx=canvas.getContext("2d");
-var stateGeoJSON=null;
+var stateGeoJSON=null;   // filled by fetchStateData()
 
+// ── geo math ─────────────────────────────────────────────────────────────────
 function lon2tile(lon,z){return Math.floor(((lon+180)/360)*Math.pow(2,z));}
 function lat2tile(lat,z){return Math.floor(((1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2)*Math.pow(2,z));}
 function tile2lon(x,z){return x/Math.pow(2,z)*360-180;}
@@ -566,34 +613,28 @@ function ll2px(lat,lon){
   var ws=TILE_SIZE*Math.pow(2,zoom);
   function ly(la){var s=Math.sin(la*Math.PI/180);return ws/(2*Math.PI)*(Math.PI-Math.log((1+s)/(1-s))/2);}
   function lx(lo){return ws*(lo+180)/360;}
-  return{x:MAP_W/2+(lx(lon)-lx(center.lon))+MAP_X,y:MAP_H/2+(ly(lat)-ly(center.lat))+MAP_Y};
+  return{x:MAP_W/2+(lx(lon)-lx(exportCenter.lon))+MAP_X,
+         y:MAP_H/2+(ly(lat)-ly(exportCenter.lat))+MAP_Y};
 }
 function px2ll(px,py){
   var ws=TILE_SIZE*Math.pow(2,zoom);
   function ly(la){var s=Math.sin(la*Math.PI/180);return ws/(2*Math.PI)*(Math.PI-Math.log((1+s)/(1-s))/2);}
   function lx(lo){return ws*(lo+180)/360;}
-  var wx=lx(center.lon)+(px-MAP_X-MAP_W/2),wy=ly(center.lat)+(py-MAP_Y-MAP_H/2);
+  var wx=lx(exportCenter.lon)+(px-MAP_X-MAP_W/2),wy=ly(exportCenter.lat)+(py-MAP_Y-MAP_H/2);
   var n=Math.PI-2*Math.PI*wy/ws;
   return{lat:180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))),lon:wx/ws*360-180};
 }
-function toDMS(deg,isLat){var d=Math.abs(deg),dd=Math.floor(d),mm=Math.floor((d-dd)*60),ss=Math.round(((d-dd)*60-mm)*60);return dd+"°"+mm+"'"+ss+'"'+(isLat?(deg>=0?"N":"S"):(deg>=0?"E":"W"));}
-function loadTile(z,x,y,cb){var k=z+"/"+x+"/"+y;if(tileCache[k]){cb(tileCache[k]);return;}var img=new Image();img.crossOrigin="anonymous";img.onload=function(){tileCache[k]=img;cb(img);};img.onerror=function(){cb(null);};img.src="https://tile.openstreetmap.org/"+z+"/"+x+"/"+y+".png";}
-${DRAW_SMOOTH_SRC}
-
-// ── LINE SEGMENT INTERSECTION (for cross-section) ──────────────────
-function segIntersect(ax,ay,bx,by,cx,cy,dx,dy){
-  var a1=by-ay,b1=ax-bx,c1=a1*ax+b1*ay;
-  var a2=dy-cy,b2=cx-dx,c2=a2*cx+b2*cy;
-  var det=a1*b2-a2*b1;
-  if(Math.abs(det)<1e-10)return null;
-  var x=(b2*c1-b1*c2)/det,y=(a1*c2-a2*c1)/det;
-  var t=((x-ax)*(bx-ax)+(y-ay)*(by-ay))/((bx-ax)*(bx-ax)+(by-ay)*(by-ay));
-  var u=((x-cx)*(dx-cx)+(y-cy)*(dy-cy))/((dx-cx)*(dx-cx)+(dy-cy)*(dy-cy));
-  if(t>=-0.001&&t<=1.001&&u>=-0.001&&u<=1.001)return{x,y,t,u};
-  return null;
+function toDMS(deg,isLat){
+  var d=Math.abs(deg),dd=Math.floor(d),mm=Math.floor((d-dd)*60),ss=Math.round(((d-dd)*60-mm)*60);
+  return dd+"\u00b0"+mm+"'"+ss+'"'+(isLat?(deg>=0?"N":"S"):(deg>=0?"E":"W"));
 }
-
-// ── POINT IN POLYGON ───────────────────────────────────────────────
+function loadTile(z,x,y,cb){
+  var k=z+"/"+x+"/"+y;if(tileCache[k]){cb(tileCache[k]);return;}
+  var img=new Image();img.crossOrigin="anonymous";
+  img.onload=function(){tileCache[k]=img;cb(img);};
+  img.onerror=function(){cb(null);};
+  img.src="https://tile.openstreetmap.org/"+z+"/"+x+"/"+y+".png";
+}
 function pointInPolygon(px,py,polygon){
   var inside=false;
   for(var i=0,j=polygon.length-1;i<polygon.length;j=i++){
@@ -602,553 +643,596 @@ function pointInPolygon(px,py,polygon){
   }
   return inside;
 }
+${DRAW_SMOOTH_SRC}
 
-// ── DRAW OUTER + INNER BORDER ──────────────────────────────────────
+// ── study boundary pixel coords (used for clipping) ───────────────────────────
+function getStudyBBox(){
+  var tl=ll2px(featMaxLat,featMinLon);
+  var br=ll2px(featMinLat,featMaxLon);
+  return{x:tl.x,y:tl.y,w:br.x-tl.x,h:br.y-tl.y};
+}
+
+// ── PAGE BORDERS ──────────────────────────────────────────────────────────────
 function drawBorders(){
-  // Thick outer border
   ctx.fillStyle="#fff";ctx.fillRect(0,0,PW,PH);
   ctx.strokeStyle="#000";ctx.lineWidth=BORDER_OUTER;
   ctx.strokeRect(BORDER_OUTER/2,BORDER_OUTER/2,PW-BORDER_OUTER,PH-BORDER_OUTER);
-  // Thin inner border
   var ib=BORDER_OUTER+BORDER_GAP;
-  ctx.lineWidth=BORDER_INNER;
-  ctx.strokeRect(ib,ib,PW-ib*2,PH-ib*2);
+  ctx.lineWidth=BORDER_INNER;ctx.strokeRect(ib,ib,PW-ib*2,PH-ib*2);
 }
 
-// ── DRAW MAP FRAME ─────────────────────────────────────────────────
+// ── MAP FRAME ─────────────────────────────────────────────────────────────────
 function drawMapFrame(){
-  ctx.strokeStyle="#000";ctx.lineWidth=1.5;
-  ctx.strokeRect(MAP_X,MAP_Y,MAP_W,MAP_H);
+  // White fill for entire map frame area (clean background)
+  ctx.fillStyle="#fff";ctx.fillRect(MAP_X,MAP_Y,MAP_W,MAP_H);
+  ctx.strokeStyle="#000";ctx.lineWidth=1.5;ctx.strokeRect(MAP_X,MAP_Y,MAP_W,MAP_H);
 }
 
-// ── DRAW OSM TILES ─────────────────────────────────────────────────
-function drawTiles(alpha){
-  ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
-  var cx2=lon2tile(center.lon,zoom),cy2=lat2tile(center.lat,zoom);
+// ── TILES — clipped to study boundary, white outside ─────────────────────────
+function drawTiles(){
+  // Tile alpha: geo map = 0 (white bg), sample map = 0.18 (faint OSM context)
+  var alpha = mapType==="geo" ? 0 : 0.18;
+  if(alpha===0)return; // no tiles for geo map
+
+  // Get study boundary pixel rect
+  var sb=getStudyBBox();
+  var cx2=lon2tile(exportCenter.lon,zoom),cy2=lat2tile(exportCenter.lat,zoom);
   var range=Math.ceil(Math.max(MAP_W,MAP_H)/TILE_SIZE/2)+2;
+
+  ctx.save();
+  // Clip to study boundary only — white shows outside
+  ctx.beginPath();ctx.rect(sb.x,sb.y,sb.w,sb.h);ctx.clip();
   for(var tx=cx2-range;tx<=cx2+range;tx++){
     for(var ty=cy2-range;ty<=cy2+range;ty++){
       var max=Math.pow(2,zoom);if(ty<0||ty>=max)continue;
       var rx=((tx%max)+max)%max,img=tileCache[zoom+"/"+rx+"/"+ty];
       var pt=ll2px(tile2lat(ty,zoom),tile2lon(tx,zoom));
       if(img){ctx.globalAlpha=alpha;ctx.drawImage(img,Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);ctx.globalAlpha=1;}
-      else{ctx.fillStyle="#f0f0f0";ctx.fillRect(Math.round(pt.x),Math.round(pt.y),TILE_SIZE,TILE_SIZE);}
     }
   }
   ctx.restore();
 }
 
-// ── DRAW GEOLOGY POLYGONS ──────────────────────────────────────────
+// ── GEOLOGY ZONES — clipped to study boundary ─────────────────────────────────
 function drawGeoZones(){
-  ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
+  var sb=getStudyBBox();
+  ctx.save();ctx.beginPath();ctx.rect(sb.x,sb.y,sb.w,sb.h);ctx.clip();
   geoZones.forEach(function(z){
     if(z.points.length<3)return;
     ctx.beginPath();
     z.points.forEach(function(pt,i){var pp=ll2px(pt.lat,pt.lon);if(i===0)ctx.moveTo(pp.x,pp.y);else ctx.lineTo(pp.x,pp.y);});
     ctx.closePath();
-    ctx.globalAlpha=0.75;ctx.fillStyle=ROCK_COLORS[z.rock]||"#ccc";ctx.fill();ctx.globalAlpha=1;
-    ctx.strokeStyle="#333";ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle=ROCK_COLORS[z.rock]||"#ccc";ctx.globalAlpha=0.92;ctx.fill();ctx.globalAlpha=1;
+    ctx.strokeStyle="#333";ctx.lineWidth=1.4;ctx.stroke();
     // Formation label at centroid
-    var cx2=z.points.reduce(function(s,p){return s+p.lon;},0)/z.points.length;
-    var cy2=z.points.reduce(function(s,p){return s+p.lat;},0)/z.points.length;
-    var cp=ll2px(cy2,cx2);
-    ctx.fillStyle="#000";ctx.font="bold 9px Times New Roman";ctx.textAlign="center";
+    var cx3=z.points.reduce(function(s,p){return s+p.lon;},0)/z.points.length;
+    var cy3=z.points.reduce(function(s,p){return s+p.lat;},0)/z.points.length;
+    var cp=ll2px(cy3,cx3);
+    ctx.fillStyle="#000";ctx.font="bold 11px Times New Roman";ctx.textAlign="center";
     ctx.fillText(z.formation&&z.formation.trim()?z.formation:z.rock,cp.x,cp.y);
     ctx.textAlign="left";
   });
   ctx.restore();
 }
 
-// ── DRAW ROADS ─────────────────────────────────────────────────────
+// ── ROADS — clipped to study boundary ────────────────────────────────────────
 function drawRoads(){
-  ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
+  var sb=getStudyBBox();
+  ctx.save();ctx.beginPath();ctx.rect(sb.x,sb.y,sb.w,sb.h);ctx.clip();
   roads.forEach(function(road){
     if(road.points.length<2)return;
     var pts=road.points.map(function(pt){return ll2px(pt.lat,pt.lon);});
     if(road.type==="major"){
-      drawSmooth(ctx,pts);ctx.strokeStyle="#c0392b";ctx.lineWidth=3.5;ctx.stroke();
-      drawSmooth(ctx,pts);ctx.strokeStyle="#e8793a";ctx.lineWidth=1.8;ctx.stroke();
-    } else {
-      drawSmooth(ctx,pts);ctx.strokeStyle="#444";ctx.lineWidth=1.5;ctx.stroke();
+      // Salmon/orange-pink — matches reference
+      drawSmooth(ctx,pts);ctx.strokeStyle="#c06040";ctx.lineWidth=5;ctx.stroke();
+      drawSmooth(ctx,pts);ctx.strokeStyle="#e8956a";ctx.lineWidth=2.8;ctx.stroke();
+    }else{
+      drawSmooth(ctx,pts);ctx.strokeStyle="#444";ctx.lineWidth=1.8;ctx.stroke();
     }
-    if(road.name&&road.name.trim()){
+    if(road.name&&road.name.trim()&&pts.length>=2){
       var mid=pts[Math.floor(pts.length/2)];
-      ctx.fillStyle="#333";ctx.font="7px Times New Roman";ctx.fillText(road.name,mid.x+2,mid.y-3);
+      ctx.fillStyle="#111";ctx.font="9px Times New Roman";
+      ctx.fillText(road.name,mid.x+4,mid.y-5);
     }
   });
   ctx.restore();
 }
 
-// ── DRAW RIVERS ────────────────────────────────────────────────────
+// ── RIVERS — clipped to study boundary ───────────────────────────────────────
 function drawRivers(){
-  ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
+  var sb=getStudyBBox();
+  ctx.save();ctx.beginPath();ctx.rect(sb.x,sb.y,sb.w,sb.h);ctx.clip();
   rivers.forEach(function(river){
     if(river.points.length<2)return;
     var pts=river.points.map(function(pt){return ll2px(pt.lat,pt.lon);});
-    drawSmooth(ctx,pts);ctx.strokeStyle="#2980d9";ctx.lineWidth=2;ctx.stroke();
-    if(river.name&&river.name.trim()){
+    drawSmooth(ctx,pts);ctx.strokeStyle="#1976d2";ctx.lineWidth=2.5;ctx.stroke();
+    if(river.name&&river.name.trim()&&pts.length>=2){
       var mid=pts[Math.floor(pts.length/2)];
-      ctx.fillStyle="#2980d9";ctx.font="italic 7px Times New Roman";ctx.fillText(river.name,mid.x+2,mid.y-3);
+      ctx.fillStyle="#1565c0";ctx.font="italic 9px Times New Roman";
+      ctx.fillText(river.name,mid.x+4,mid.y-5);
     }
   });
   ctx.restore();
 }
 
-// ── DRAW STUDY BOUNDARY ────────────────────────────────────────────
+// ── STUDY BOUNDARY — drawn on top of content, inside map frame ───────────────
 function drawStudyBoundary(){
   if(featMinLat===featMaxLat||featMinLon===featMaxLon)return;
-  var tl=ll2px(featMaxLat,featMinLon),br=ll2px(featMinLat,featMaxLon);
+  var sb=getStudyBBox();
   ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
-  ctx.strokeStyle="#000";ctx.lineWidth=1.2;ctx.setLineDash([6,3]);
-  ctx.strokeRect(tl.x,tl.y,br.x-tl.x,br.y-tl.y);
+  ctx.strokeStyle="#222";ctx.lineWidth=1.4;ctx.setLineDash([8,4]);
+  ctx.strokeRect(sb.x,sb.y,sb.w,sb.h);
   ctx.setLineDash([]);ctx.restore();
 }
 
-// ── DRAW TOWNS ─────────────────────────────────────────────────────
+// ── TOWNS — clipped to study boundary ────────────────────────────────────────
 function drawTowns(){
-  ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
+  var sb=getStudyBBox();
+  ctx.save();ctx.beginPath();ctx.rect(sb.x,sb.y,sb.w,sb.h);ctx.clip();
   towns.forEach(function(town){
     var pp=ll2px(town.lat,town.lon);
-    ctx.fillStyle="#000";ctx.beginPath();ctx.arc(pp.x,pp.y,4,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(pp.x,pp.y,2,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle="#000";ctx.font="bold 8px Times New Roman";ctx.fillText(town.name||"",pp.x+5,pp.y-3);
+    ctx.fillStyle="#000";ctx.beginPath();ctx.arc(pp.x,pp.y,5,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(pp.x,pp.y,2.2,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#000";ctx.font="bold 10px Times New Roman";
+    ctx.fillText(town.name||"",pp.x+7,pp.y-4);
   });
   ctx.restore();
 }
 
-// ── DRAW SAMPLES ───────────────────────────────────────────────────
+// ── SAMPLES — clipped to study boundary ──────────────────────────────────────
 function drawSamples(showLabels){
-  ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
+  var sb=getStudyBBox();
+  ctx.save();ctx.beginPath();ctx.rect(sb.x,sb.y,sb.w,sb.h);ctx.clip();
   samples.forEach(function(s){
-    var pp=ll2px(s.lat,s.lon),sz=8;
-    ctx.fillStyle="#c0392b";
-    ctx.beginPath();ctx.moveTo(pp.x,pp.y-sz);ctx.lineTo(pp.x+sz*0.75,pp.y+sz*0.5);ctx.lineTo(pp.x-sz*0.75,pp.y+sz*0.5);ctx.closePath();ctx.fill();
-    ctx.strokeStyle="#7b241c";ctx.lineWidth=0.8;ctx.stroke();
+    var pp=ll2px(s.lat,s.lon),sz=12;
+    ctx.fillStyle="#7b0000";
+    ctx.beginPath();
+    ctx.moveTo(pp.x,pp.y-sz);
+    ctx.lineTo(pp.x+sz*0.87,pp.y+sz*0.6);
+    ctx.lineTo(pp.x-sz*0.87,pp.y+sz*0.6);
+    ctx.closePath();ctx.fill();
+    ctx.strokeStyle="#4a0000";ctx.lineWidth=1;ctx.stroke();
     if(showLabels&&s.id){
-      ctx.fillStyle="#000";ctx.font="7px Times New Roman";
-      ctx.fillText(s.id,pp.x-sz*0.75-2,pp.y-sz-1); // upper-left offset matching reference
-    }
-    // Strike/dip symbol on geologic map
-    if(mapType==="geo"&&s.strike&&s.dip){
-      var sa=parseFloat(s.strike)*Math.PI/180,sl=10;
-      ctx.save();ctx.translate(pp.x,pp.y);ctx.strokeStyle="#1a7a1a";ctx.lineWidth=1.2;
-      ctx.beginPath();ctx.moveTo(-sl*Math.sin(sa),-sl*Math.cos(sa));ctx.lineTo(sl*Math.sin(sa),sl*Math.cos(sa));
-      var da=sa+Math.PI/2;ctx.moveTo(0,0);ctx.lineTo(sl*0.5*Math.sin(da),sl*0.5*Math.cos(da));ctx.stroke();
-      ctx.fillStyle="#1a7a1a";ctx.font="6px Times New Roman";ctx.fillText(s.dip+"°",sl*0.6*Math.sin(da)+1,sl*0.6*Math.cos(da));
-      ctx.restore();
+      ctx.fillStyle="#000";ctx.font="bold 8px Times New Roman";
+      ctx.fillText(s.id,pp.x+sz+2,pp.y+3);
     }
   });
   ctx.restore();
 }
 
-// ── DRAW STRIKE/DIP ON GEO ZONES ──────────────────────────────────
-function drawZoneStrikeDip(){
-  ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
+// ── STRIKE & DIP — clipped to study boundary ─────────────────────────────────
+function drawStrikeDip(){
+  var sb=getStudyBBox();
+  ctx.save();ctx.beginPath();ctx.rect(sb.x,sb.y,sb.w,sb.h);ctx.clip();
+  function drawSD(px,py,strikeStr,dipStr){
+    if(!strikeStr||!dipStr)return;
+    var sa=parseFloat(strikeStr)*Math.PI/180,sl=16;
+    ctx.save();ctx.translate(px,py);
+    ctx.strokeStyle="#1b5e20";ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(-sl*Math.sin(sa),-sl*Math.cos(sa));
+    ctx.lineTo(sl*Math.sin(sa),sl*Math.cos(sa));
+    var da=sa+Math.PI/2;
+    ctx.moveTo(0,0);ctx.lineTo(sl*0.6*Math.sin(da),sl*0.6*Math.cos(da));
+    ctx.stroke();
+    ctx.fillStyle="#1b5e20";ctx.font="bold 11px Times New Roman";ctx.textAlign="left";
+    ctx.fillText(parseFloat(dipStr),sl*0.7*Math.sin(da)+3,sl*0.7*Math.cos(da)+4);
+    ctx.textAlign="left";ctx.restore();
+  }
+  samples.forEach(function(s){
+    var pp=ll2px(s.lat,s.lon);
+    drawSD(pp.x,pp.y-16,s.strike,s.dip);
+  });
   geoZones.forEach(function(z){
-    if(!z.strike||!z.dip||z.points.length<3)return;
-    var cx2=z.points.reduce(function(s,p){return s+p.lon;},0)/z.points.length;
-    var cy2=z.points.reduce(function(s,p){return s+p.lat;},0)/z.points.length;
-    var pp=ll2px(cy2,cx2),sa=parseFloat(z.strike)*Math.PI/180,sl=12;
-    ctx.strokeStyle="#27ae60";ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(pp.x-sl*Math.sin(sa),pp.y-sl*Math.cos(sa));ctx.lineTo(pp.x+sl*Math.sin(sa),pp.y+sl*Math.cos(sa));
-    var da=sa+Math.PI/2;ctx.moveTo(pp.x,pp.y);ctx.lineTo(pp.x+sl*0.5*Math.sin(da),pp.y+sl*0.5*Math.cos(da));ctx.stroke();
-    ctx.fillStyle="#000";ctx.font="bold 7px Times New Roman";ctx.textAlign="center";
-    ctx.fillText(z.dip,pp.x+sl*0.8*Math.sin(da),pp.y+sl*0.8*Math.cos(da));ctx.textAlign="left";
+    if(z.points.length<3)return;
+    var cx3=z.points.reduce(function(s,p){return s+p.lon;},0)/z.points.length;
+    var cy3=z.points.reduce(function(s,p){return s+p.lat;},0)/z.points.length;
+    var pp=ll2px(cy3,cx3);
+    drawSD(pp.x,pp.y+20,z.strike,z.dip);
   });
   ctx.restore();
 }
 
-// ── DRAW A–B LINE (geologic map only) ─────────────────────────────
+// ── A–B LINE — inside map frame ───────────────────────────────────────────────
 function drawABLine(){
   if(mapType!=="geo")return;
   var ptA=ll2px(abLat,abWestLon),ptB=ll2px(abLat,abEastLon);
   ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
-  ctx.strokeStyle="#000";ctx.lineWidth=1.5;ctx.setLineDash([8,4]);
+  ctx.strokeStyle="#111";ctx.lineWidth=1.8;ctx.setLineDash([10,5]);
   ctx.beginPath();ctx.moveTo(ptA.x,ptA.y);ctx.lineTo(ptB.x,ptB.y);ctx.stroke();
-  ctx.setLineDash([]);
-  // A label (left/west side)
-  ctx.fillStyle="#000";ctx.font="bold 11px Times New Roman";ctx.textAlign="center";
-  ctx.fillText("A",ptA.x-10,ptA.y+4);
-  ctx.fillText("B",ptB.x+10,ptB.y+4);
-  ctx.textAlign="left";ctx.restore();
-  // A and B labels on border
-  ctx.font="bold 11px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
-  ctx.fillText("A",MAP_X-12,ptA.y+4);
-  ctx.fillText("B",MAP_X+MAP_W+12,ptB.y+4);
+  ctx.setLineDash([]);ctx.restore();
+  // A/B labels on frame edges
+  ctx.font="bold 13px Times New Roman";ctx.fillStyle="#111";
+  ctx.textAlign="right";ctx.fillText("A",MAP_X-6,ptA.y+5);
+  ctx.textAlign="left";ctx.fillText("B",MAP_X+MAP_W+6,ptB.y+5);
   ctx.textAlign="left";
 }
 
-// ── DRAW COORDINATE GRID ───────────────────────────────────────────
+// ── COORDINATE GRID ───────────────────────────────────────────────────────────
 function drawGrid(){
-  ctx.save();ctx.strokeStyle="rgba(0,0,0,0.25)";ctx.lineWidth=0.5;ctx.setLineDash([3,3]);
-  ctx.font="8px Times New Roman";ctx.fillStyle="#000";
-  var step=zoom<=6?5:zoom<=8?2:zoom<=10?1:0.5;
+  ctx.save();
+  ctx.strokeStyle="rgba(140,140,140,0.18)";ctx.lineWidth=0.4;ctx.setLineDash([3,4]);
+  ctx.font="9px Times New Roman";ctx.fillStyle="#111";
+  // Step size based on bbox span
+  var span=bboxMaxLat-bboxMinLat;
+  var step=span>2?1:span>0.5?0.25:span>0.1?0.05:0.01;
   var tl=px2ll(MAP_X,MAP_Y),br=px2ll(MAP_X+MAP_W,MAP_Y+MAP_H);
-  for(var lo=Math.ceil(tl.lon/step)*step;lo<=br.lon;lo+=step){
-    var px2=ll2px(center.lat,lo).x;if(px2<MAP_X||px2>MAP_X+MAP_W)continue;
+  for(var lo=Math.ceil(tl.lon/step)*step;lo<=br.lon+step;lo+=step){
+    lo=Math.round(lo*100000)/100000;
+    var px2=ll2px(exportCenter.lat,lo).x;
+    if(px2<MAP_X||px2>MAP_X+MAP_W)continue;
     ctx.beginPath();ctx.moveTo(px2,MAP_Y);ctx.lineTo(px2,MAP_Y+MAP_H);ctx.stroke();
     ctx.textAlign="center";
-    ctx.fillText(toDMS(lo,false),px2,MAP_Y-4);
-    ctx.fillText(toDMS(lo,false),px2,MAP_Y+MAP_H+12);
+    ctx.fillText(toDMS(lo,false),px2,MAP_Y-5);
+    ctx.fillText(toDMS(lo,false),px2,MAP_Y+MAP_H+13);
   }
-  for(var la=Math.floor(tl.lat/step)*step;la>=br.lat;la-=step){
-    var py2=ll2px(la,center.lon).y;if(py2<MAP_Y||py2>MAP_Y+MAP_H)continue;
+  for(var la=Math.floor(tl.lat/step)*step;la>=br.lat-step;la-=step){
+    la=Math.round(la*100000)/100000;
+    var py2=ll2px(la,exportCenter.lon).y;
+    if(py2<MAP_Y||py2>MAP_Y+MAP_H)continue;
     ctx.beginPath();ctx.moveTo(MAP_X,py2);ctx.lineTo(MAP_X+MAP_W,py2);ctx.stroke();
-    ctx.save();ctx.translate(MAP_X-4,py2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillText(toDMS(la,true),0,0);ctx.restore();
-    ctx.save();ctx.translate(MAP_X+MAP_W+14,py2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillText(toDMS(la,true),0,0);ctx.restore();
+    ctx.save();ctx.translate(MAP_X-5,py2);ctx.rotate(-Math.PI/2);
+    ctx.textAlign="center";ctx.fillText(toDMS(la,true),0,0);ctx.restore();
+    ctx.save();ctx.translate(MAP_X+MAP_W+16,py2);ctx.rotate(-Math.PI/2);
+    ctx.textAlign="center";ctx.fillText(toDMS(la,true),0,0);ctx.restore();
   }
   ctx.setLineDash([]);ctx.textAlign="left";ctx.restore();
 }
 
-// ── DRAW NORTH ARROW (inside map frame, top right) ─────────────────
+// ── NORTH ARROW — top right inside map frame ──────────────────────────────────
 function drawNorthArrow(){
-  var ax=MAP_X+MAP_W-30,ay=MAP_Y+34;
+  var ax=MAP_X+MAP_W-36,ay=MAP_Y+40;
   ctx.save();
-  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(ax,ay,22,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle="#000";ctx.lineWidth=1;ctx.stroke();
-  // North half (black)
-  ctx.fillStyle="#000";ctx.beginPath();ctx.moveTo(ax,ay-18);ctx.lineTo(ax-8,ay+4);ctx.lineTo(ax+8,ay+4);ctx.closePath();ctx.fill();
-  // South half (white with outline)
-  ctx.fillStyle="#fff";ctx.beginPath();ctx.moveTo(ax,ay+18);ctx.lineTo(ax-8,ay-4);ctx.lineTo(ax+8,ay-4);ctx.closePath();ctx.fill();
-  ctx.strokeStyle="#000";ctx.lineWidth=0.7;ctx.beginPath();ctx.moveTo(ax,ay+18);ctx.lineTo(ax-8,ay-4);ctx.lineTo(ax+8,ay-4);ctx.closePath();ctx.stroke();
-  ctx.fillStyle="#000";ctx.font="bold 12px Times New Roman";ctx.textAlign="center";ctx.fillText("N",ax,ay-22);
-  ctx.textAlign="left";ctx.restore();
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(ax,ay,24,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle="#000";ctx.lineWidth=1.2;ctx.stroke();
+  ctx.fillStyle="#000";ctx.beginPath();
+  ctx.moveTo(ax,ay-20);ctx.lineTo(ax-9,ay+6);ctx.lineTo(ax+9,ay+6);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#fff";ctx.beginPath();
+  ctx.moveTo(ax,ay+20);ctx.lineTo(ax-9,ay-6);ctx.lineTo(ax+9,ay-6);ctx.closePath();ctx.fill();
+  ctx.strokeStyle="#000";ctx.lineWidth=0.8;ctx.beginPath();
+  ctx.moveTo(ax,ay+20);ctx.lineTo(ax-9,ay-6);ctx.lineTo(ax+9,ay-6);ctx.closePath();ctx.stroke();
+  ctx.fillStyle="#000";ctx.font="bold 14px Times New Roman";
+  ctx.textAlign="center";ctx.fillText("N",ax,ay-24);ctx.textAlign="left";
+  ctx.restore();
 }
 
-// ── DRAW SCALE BAR (inside map frame, bottom left) ─────────────────
+// ── SCALE BAR — below map frame, outside, left-aligned ───────────────────────
 function drawScaleBar(){
-  var mpp=(156543.03392*Math.cos(center.lat*Math.PI/180))/Math.pow(2,zoom);
-  var bm=zoom>=12?500:zoom>=10?2000:zoom>=8?20000:zoom>=6?100000:500000;
+  var mpp=(156543.03392*Math.cos(exportCenter.lat*Math.PI/180))/Math.pow(2,zoom);
+  var targets=[100,200,500,1000,2000,5000,10000,20000,50000,100000,200000,500000];
+  var idealPx=MAP_W*0.30;
+  var bm=targets[0];
+  for(var i=0;i<targets.length;i++){if(targets[i]/mpp<=idealPx)bm=targets[i];}
   var bp=bm/mpp;
-  var sx=MAP_X+14,sy=MAP_Y+MAP_H-18;
+  var sx=MAP_X,sy=MAP_Y+MAP_H+16;
   ctx.save();
-  ctx.font="bold 8px Times New Roman";ctx.fillStyle="#000";ctx.fillText("SCALE",sx,sy-14);
-  // 5-segment alternating black/white scale bar
+  ctx.font="bold 9px Times New Roman";ctx.fillStyle="#000";
+  ctx.fillText("SCALE",sx,sy-1);
+  // 5-segment bar matching reference style
   var segs=4,segW=bp/segs;
-  for(var i=0;i<segs;i++){
-    ctx.fillStyle=i%2===0?"#000":"#fff";
-    ctx.fillRect(sx+i*segW,sy-8,segW,8);
+  for(var j=0;j<segs;j++){
+    ctx.fillStyle=j%2===0?"#000":"#fff";
+    ctx.fillRect(sx+j*segW,sy+4,segW,11);
   }
-  ctx.strokeStyle="#000";ctx.lineWidth=0.8;ctx.strokeRect(sx,sy-8,bp,8);
-  // Tick labels
-  ctx.font="8px Times New Roman";
-  var labels=[0,bm/2,bm];var labelPos=[0,bp/2,bp];
-  labels.forEach(function(lbl,i){
-    var txt=lbl===0?"0":lbl>=1000?(lbl/1000)+" km":lbl+" m";
-    ctx.textAlign="center";ctx.fillText(txt,sx+labelPos[i],sy+10);
+  ctx.strokeStyle="#000";ctx.lineWidth=1;ctx.strokeRect(sx,sy+4,bp,11);
+  // Labels: 0, half, full
+  ctx.font="9px Times New Roman";ctx.fillStyle="#000";
+  [[0,0],[bm/2,bp/2],[bm,bp]].forEach(function(pair){
+    var lbl=pair[0]===0?"0":pair[0]>=1000?(pair[0]/1000)+" km":pair[0]+" m";
+    ctx.textAlign="center";ctx.fillText(lbl,sx+pair[1],sy+28);
   });
   ctx.textAlign="left";ctx.restore();
 }
 
-// ── RIGHT PANEL ────────────────────────────────────────────────────
+// ── RIGHT PANEL ───────────────────────────────────────────────────────────────
 function drawRightPanel(){
-  var RX=MAP_X+MAP_W+12;
-  var RW=RIGHT_W-18;
-  var ry=MAP_Y;
+  var RX=MAP_X+MAP_W+12,RW=RIGHT_W-18;
+  var panelTop=MAP_Y,panelH=MAP_H;
 
-  // Panel outer border
-  ctx.strokeStyle="#000";ctx.lineWidth=1;
-  ctx.strokeRect(RX,MAP_Y,RW,MAP_H);
+  // Panel border
+  ctx.fillStyle="#fff";ctx.fillRect(RX,panelTop,RW,panelH);
+  ctx.strokeStyle="#000";ctx.lineWidth=1;ctx.strokeRect(RX,panelTop,RW,panelH);
 
-  // ── INSET MAP (top 40% of right panel) ──────────────────────────
-  var insetH=Math.round(MAP_H*0.40);
-  ctx.strokeStyle="#000";ctx.lineWidth=0.8;
-  ctx.strokeRect(RX,MAP_Y,RW,insetH);
-  ctx.fillStyle="#f5f5f5";ctx.fillRect(RX+1,MAP_Y+1,RW-2,insetH-2);
+  // ── INSET MAP — top 36% of right panel ──────────────────────────────────────
+  var insetH=Math.round(panelH*0.36);
+  ctx.fillStyle="#fff";ctx.fillRect(RX+1,panelTop+1,RW-2,insetH-1);
+  ctx.strokeStyle="#000";ctx.lineWidth=0.9;ctx.strokeRect(RX,panelTop,RW,insetH);
 
-  ctx.save();ctx.beginPath();ctx.rect(RX+1,MAP_Y+1,RW-2,insetH-2);ctx.clip();
+  // Build inset coordinate transform from state outline
+  // Static outline is always the primary — live GeoJSON is an enhancement if fetch succeeded
+  var outline = (stateGeoJSON && stateGeoJSON._stateOutline && stateGeoJSON._stateOutline.length > 5)
+                ? stateGeoJSON._stateOutline
+                : AKS_OUTLINE;
+  var oLons=outline.map(function(c){return c[0];});
+  var oLats=outline.map(function(c){return c[1];});
+  var oMinLon=Math.min.apply(null,oLons),oMaxLon=Math.max.apply(null,oLons);
+  var oMinLat=Math.min.apply(null,oLats),oMaxLat=Math.max.apply(null,oLats);
+  var iPad=8;
+  var iW=RW-iPad*2,iH=insetH-iPad*2;
+  var scl=Math.min(iW/(oMaxLon-oMinLon),iH/(oMaxLat-oMinLat));
+  var iox=RX+iPad+((iW-(oMaxLon-oMinLon)*scl)/2);
+  var ioy=panelTop+iPad+((iH-(oMaxLat-oMinLat)*scl)/2);
+  function toInset(lon,lat){return{x:iox+(lon-oMinLon)*scl,y:ioy+(oMaxLat-lat)*scl};}
 
-  // Draw state outlines from GeoJSON if available
-  if(stateGeoJSON&&stateGeoJSON.features){
-    // Compute bounding box of all features
-    var allILat=[],allILon=[];
-    stateGeoJSON.features.forEach(function(feat){
-      var geom=feat.geometry;
-      if(!geom)return;
-      var polys=geom.type==="Polygon"?[geom.coordinates]:geom.type==="MultiPolygon"?geom.coordinates:[];
-      polys.forEach(function(poly){poly[0].forEach(function(c){allILon.push(c[0]);allILat.push(c[1]);});});
-    });
-    var minLat2=Math.min.apply(null,allILat),maxLat2=Math.max.apply(null,allILat);
-    var minLon2=Math.min.apply(null,allILon),maxLon2=Math.max.apply(null,allILon);
-    var latRange=maxLat2-minLat2,lonRange=maxLon2-minLon2;
-    var scl=Math.min((RW-10)/lonRange,(insetH-10)/latRange);
-    var ox=RX+5,oy=MAP_Y+5+((insetH-10)-latRange*scl)/2;
+  // Draw state outline — white fill, black border
+  ctx.save();ctx.beginPath();ctx.rect(RX+1,panelTop+1,RW-2,insetH-2);ctx.clip();
+  ctx.beginPath();
+  outline.forEach(function(c,i){
+    var p=toInset(c[0],c[1]);if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
+  });
+  ctx.closePath();
+  ctx.fillStyle="#fff";ctx.fill();
+  ctx.strokeStyle="#000";ctx.lineWidth=1.2;ctx.stroke();
 
-    function toInset(lon,lat){return{x:ox+(lon-minLon2)*scl,y:oy+(maxLat2-lat)*scl};}
-
-    // Draw all LGA/state sub-features
-    stateGeoJSON.features.forEach(function(feat){
-      var geom=feat.geometry;if(!geom)return;
-      var polys=geom.type==="Polygon"?[geom.coordinates]:geom.type==="MultiPolygon"?geom.coordinates:[];
-      polys.forEach(function(poly){
-        ctx.beginPath();
-        poly[0].forEach(function(c,i){var p=toInset(c[0],c[1]);if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);});
-        ctx.closePath();
-        ctx.fillStyle="#e8e8e8";ctx.fill();
-        ctx.strokeStyle="#888";ctx.lineWidth=0.5;ctx.stroke();
-      });
-    });
-
-    // Draw study area highlight rectangle
-    if(featMinLat!==featMaxLat&&featMinLon!==featMaxLon){
-      var tl2=toInset(featMinLon,featMaxLat),br2=toInset(featMaxLon,featMinLat);
-      ctx.fillStyle="rgba(200,100,50,0.35)";ctx.fillRect(tl2.x,tl2.y,br2.x-tl2.x,br2.y-tl2.y);
-      ctx.strokeStyle="#c0392b";ctx.lineWidth=1.5;ctx.strokeRect(tl2.x,tl2.y,br2.x-tl2.x,br2.y-tl2.y);
-    }
-  } else {
-    // Fallback: simple placeholder
-    ctx.fillStyle="#888";ctx.font="9px Times New Roman";ctx.textAlign="center";
-    ctx.fillText(state+" State",RX+RW/2,MAP_Y+insetH/2-5);
-    ctx.fillText("(Inset Map)",RX+RW/2,MAP_Y+insetH/2+8);
-    ctx.textAlign="left";
+  // Draw study area bbox as grey shaded rectangle — matching reference
+  if(featMinLat!==featMaxLat&&featMinLon!==featMaxLon){
+    var tl2=toInset(featMinLon,featMaxLat),br2=toInset(featMaxLon,featMinLat);
+    var rw=Math.max(br2.x-tl2.x,5),rh=Math.max(br2.y-tl2.y,5);
+    ctx.fillStyle="rgba(160,140,120,0.65)";ctx.fillRect(tl2.x,tl2.y,rw,rh);
+    ctx.strokeStyle="#555";ctx.lineWidth=1;ctx.strokeRect(tl2.x,tl2.y,rw,rh);
   }
   ctx.restore();
 
-  // Inset label
-  ctx.font="bold 7px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
-  ctx.fillText(state.toUpperCase()+" STATE",RX+RW/2,MAP_Y+insetH-4);
+  // State name below inset
+  ctx.font="bold 8px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
+  ctx.fillText((state||"").toUpperCase()+" STATE",RX+RW/2,panelTop+insetH-4);
   ctx.textAlign="left";
 
-  // ── LEGEND (below inset) ─────────────────────────────────────────
-  var ly=MAP_Y+insetH+10;
-  ctx.font="bold 10px Times New Roman";ctx.fillStyle="#000";
-  ctx.fillText("Legend",RX+8,ly);ly+=4;
+  // ── LEGEND ───────────────────────────────────────────────────────────────────
+  var ly=panelTop+insetH+16;
+  ctx.font="bold 12px Times New Roman";ctx.fillStyle="#000";
+  ctx.textAlign="center";ctx.fillText("Legend",RX+RW/2,ly);ctx.textAlign="left";
+  ly+=5;
   ctx.strokeStyle="#000";ctx.lineWidth=0.7;
-  ctx.beginPath();ctx.moveTo(RX+6,ly);ctx.lineTo(RX+RW-6,ly);ctx.stroke();ly+=12;
+  ctx.beginPath();ctx.moveTo(RX+6,ly);ctx.lineTo(RX+RW-6,ly);ctx.stroke();
+  ly+=14;
 
-  var itemH=16,symW=24;
+  var iH2=16,symW=22;
+
   // Town
-  ctx.fillStyle="#000";ctx.beginPath();ctx.arc(RX+12,ly-4,4,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(RX+12,ly-4,2,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#000";ctx.font="9px Times New Roman";ctx.fillText("Town",RX+22,ly);ly+=itemH;
-  // Sample location
-  ctx.fillStyle="#c0392b";ctx.beginPath();ctx.moveTo(RX+12,ly-10);ctx.lineTo(RX+18,ly-2);ctx.lineTo(RX+6,ly-2);ctx.closePath();ctx.fill();
-  ctx.fillStyle="#000";ctx.font="9px Times New Roman";ctx.fillText("Sample Location",RX+22,ly-4);ly+=itemH;
-  // Major road
-  ctx.strokeStyle="#c0392b";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(RX+6,ly-4);ctx.lineTo(RX+6+symW,ly-4);ctx.stroke();
-  ctx.strokeStyle="#e8793a";ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(RX+6,ly-4);ctx.lineTo(RX+6+symW,ly-4);ctx.stroke();
-  ctx.fillStyle="#000";ctx.font="9px Times New Roman";ctx.fillText("Major Road",RX+36,ly-1);ly+=itemH;
-  // Minor road
-  ctx.strokeStyle="#444";ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(RX+6,ly-4);ctx.lineTo(RX+6+symW,ly-4);ctx.stroke();
-  ctx.fillStyle="#000";ctx.font="9px Times New Roman";ctx.fillText("Minor Road",RX+36,ly-1);ly+=itemH;
+  ctx.fillStyle="#000";ctx.beginPath();ctx.arc(RX+13,ly-5,4.5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(RX+13,ly-5,2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#000";ctx.font="10px Times New Roman";ctx.fillText("Town",RX+24,ly-1);ly+=iH2;
+
+  // Sample
+  ctx.fillStyle="#7b0000";
+  ctx.beginPath();ctx.moveTo(RX+13,ly-12);ctx.lineTo(RX+19,ly-3);ctx.lineTo(RX+7,ly-3);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#000";ctx.font="10px Times New Roman";ctx.fillText("Sample Locations",RX+24,ly-5);ly+=iH2;
+
   // River
-  ctx.strokeStyle="#2980d9";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(RX+6,ly-4);ctx.lineTo(RX+6+symW,ly-4);ctx.stroke();
-  ctx.fillStyle="#000";ctx.font="9px Times New Roman";ctx.fillText("River",RX+36,ly-1);ly+=itemH;
+  ctx.strokeStyle="#1976d2";ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(RX+6,ly-5);ctx.lineTo(RX+6+symW,ly-5);ctx.stroke();
+  ctx.fillStyle="#000";ctx.font="10px Times New Roman";ctx.fillText("River",RX+34,ly-2);ly+=iH2;
+
+  // Minor road
+  ctx.strokeStyle="#444";ctx.lineWidth=1.8;
+  ctx.beginPath();ctx.moveTo(RX+6,ly-5);ctx.lineTo(RX+6+symW,ly-5);ctx.stroke();
+  ctx.fillStyle="#000";ctx.font="10px Times New Roman";ctx.fillText("Minor Road",RX+34,ly-2);ly+=iH2;
+
+  // Major road
+  ctx.strokeStyle="#c06040";ctx.lineWidth=4.5;
+  ctx.beginPath();ctx.moveTo(RX+6,ly-5);ctx.lineTo(RX+6+symW,ly-5);ctx.stroke();
+  ctx.strokeStyle="#e8956a";ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(RX+6,ly-5);ctx.lineTo(RX+6+symW,ly-5);ctx.stroke();
+  ctx.fillStyle="#000";ctx.font="10px Times New Roman";ctx.fillText("Major Road",RX+34,ly-2);ly+=iH2;
+
   // Study boundary
-  ctx.strokeStyle="#000";ctx.lineWidth=1;ctx.setLineDash([4,2]);ctx.beginPath();ctx.moveTo(RX+6,ly-4);ctx.lineTo(RX+6+symW,ly-4);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle="#000";ctx.font="9px Times New Roman";ctx.fillText("Study Boundary",RX+36,ly-1);ly+=itemH;
+  ctx.strokeStyle="#222";ctx.lineWidth=1.2;ctx.setLineDash([6,3]);
+  ctx.beginPath();ctx.moveTo(RX+6,ly-5);ctx.lineTo(RX+6+symW,ly-5);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle="#000";ctx.font="10px Times New Roman";ctx.fillText("Study Boundary",RX+34,ly-2);ly+=iH2;
 
   if(mapType==="geo"){
     // Strike & dip
-    ctx.strokeStyle="#27ae60";ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(RX+6,ly-4);ctx.lineTo(RX+6+symW,ly-4);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(RX+6+symW/2,ly-4);ctx.lineTo(RX+6+symW/2,ly-10);ctx.stroke();
-    ctx.fillStyle="#000";ctx.font="9px Times New Roman";ctx.fillText("Strike & Dip",RX+36,ly-1);ly+=itemH;
-    ly+=4;
+    ctx.strokeStyle="#1b5e20";ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(RX+6,ly-5);ctx.lineTo(RX+6+symW,ly-5);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(RX+6+symW/2,ly-5);ctx.lineTo(RX+6+symW/2,ly-12);ctx.stroke();
+    ctx.fillStyle="#000";ctx.font="10px Times New Roman";ctx.fillText("Strike and Dip",RX+34,ly-2);ly+=iH2;
+
     // Lithology header
-    ctx.strokeStyle="#000";ctx.lineWidth=0.7;ctx.beginPath();ctx.moveTo(RX+6,ly);ctx.lineTo(RX+RW-6,ly);ctx.stroke();ly+=10;
-    ctx.font="bold 9px Times New Roman";ctx.fillStyle="#000";ctx.fillText("LITHOLOGY",RX+8,ly);ly+=12;
-    // Used rocks only
+    ly+=6;
+    ctx.strokeStyle="#000";ctx.lineWidth=0.7;
+    ctx.beginPath();ctx.moveTo(RX+6,ly);ctx.lineTo(RX+RW-6,ly);ctx.stroke();ly+=12;
+    ctx.font="bold 10px Times New Roman";ctx.fillStyle="#000";
+    ctx.fillText("Lithology",RX+8,ly);ly+=14;
+
+    // Rock swatches — only rocks present in geoZones
     var usedRocks={};
     geoZones.forEach(function(z){
       var lbl=z.formation&&z.formation.trim()?z.formation:z.rock;
-      usedRocks[lbl]=ROCK_COLORS[z.rock]||"#ccc";
+      if(!usedRocks[lbl])usedRocks[lbl]=ROCK_COLORS[z.rock]||"#ccc";
     });
     Object.keys(usedRocks).forEach(function(lbl){
-      ctx.fillStyle=usedRocks[lbl];ctx.fillRect(RX+8,ly-10,14,12);
-      ctx.strokeStyle="#333";ctx.lineWidth=0.5;ctx.strokeRect(RX+8,ly-10,14,12);
-      ctx.fillStyle="#000";ctx.font="8px Times New Roman";
-      // Wrap long labels
-      var maxW=RW-28;var words=lbl.split(" ");var line="";
-      words.forEach(function(w){if(ctx.measureText(line+" "+w).width>maxW&&line){ctx.fillText(line,RX+26,ly);ly+=10;line=w;}else{line=line?line+" "+w:w;}});
-      ctx.fillText(line,RX+26,ly);ly+=14;
+      if(ly>panelTop+panelH-100)return;
+      ctx.fillStyle=usedRocks[lbl];ctx.fillRect(RX+8,ly-11,16,13);
+      ctx.strokeStyle="#444";ctx.lineWidth=0.5;ctx.strokeRect(RX+8,ly-11,16,13);
+      ctx.fillStyle="#000";ctx.font="9px Times New Roman";
+      var maxW=RW-32,words=lbl.split(" "),line="";
+      words.forEach(function(w){
+        if(ctx.measureText(line+" "+w).width>maxW&&line){
+          ctx.fillText(line,RX+28,ly);ly+=11;line=w;
+        }else{line=line?line+" "+w:w;}
+      });
+      ctx.fillText(line,RX+28,ly);ly+=15;
     });
   }
 
-  // ── TITLE BLOCK (below legend) ───────────────────────────────────
-  var titleY=MAP_Y+MAP_H-80;
+  // ── TITLE BLOCK — bottom of right panel ──────────────────────────────────────
+  var titleY=panelTop+panelH-92;
   ctx.strokeStyle="#000";ctx.lineWidth=0.8;
   ctx.beginPath();ctx.moveTo(RX,titleY);ctx.lineTo(RX+RW,titleY);ctx.stroke();
   ctx.font="bold 9px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
-  ctx.fillText(mapTitle,RX+RW/2,titleY+14);
-  ctx.font="8px Times New Roman";
-  ctx.fillText(mapSubtitle,RX+RW/2,titleY+26);
+  // Wrap long title
+  var titleWords=mapTitle.split(" "),titleLine1="",titleLine2="";
+  titleWords.forEach(function(w){
+    if(ctx.measureText(titleLine1+" "+w).width<RW-8&&!titleLine2)titleLine1=titleLine1?titleLine1+" "+w:w;
+    else titleLine2=titleLine2?titleLine2+" "+w:w;
+  });
+  ctx.fillText(titleLine1,RX+RW/2,titleY+13);
+  if(titleLine2)ctx.fillText(titleLine2,RX+RW/2,titleY+25);
+  var subtY=titleLine2?titleY+37:titleY+26;
+  ctx.font="8px Times New Roman";ctx.fillText(mapSubtitle,RX+RW/2,subtY);
   ctx.font="7px Times New Roman";ctx.fillStyle="#555";
-  ctx.fillText("Projection: WGS84 / Geographic",RX+RW/2,titleY+40);
-  ctx.fillText("Base map: © OpenStreetMap contributors",RX+RW/2,titleY+52);
-  ctx.fillText("Generated by Geo Mapping System",RX+RW/2,titleY+64);
+  ctx.fillText("Projection: WGS 84 / Geographic",RX+RW/2,subtY+13);
+  ctx.fillText("\u00a9 OpenStreetMap contributors",RX+RW/2,subtY+24);
+  ctx.fillText("Geo Mapping System v0.7",RX+RW/2,subtY+35);
   ctx.textAlign="left";
 }
 
-// ── DRAW CROSS-SECTION (geologic map only) ─────────────────────────
+// ── CROSS-SECTION — stratigraphic schematic style matching reference ───────────
 function drawCrossSection(){
   if(mapType!=="geo"||CS_H===0)return;
 
-  var CSY=MAP_Y+MAP_H+30;
-  var CSX=MAP_X;
-  var CSW=MAP_W;
+  var CSX=MAP_X,CSW=MAP_W;
+  var CSY=MAP_Y+MAP_H+CS_GAP;
   var CSH=CS_H;
 
-  // Section frame
-  ctx.strokeStyle="#000";ctx.lineWidth=1.5;ctx.strokeRect(CSX,CSY,CSW,CSH);
-  ctx.fillStyle="#fff";ctx.fillRect(CSX+1,CSY+1,CSW-2,CSH-2);
+  // Box + white background
+  ctx.fillStyle="#fff";ctx.fillRect(CSX,CSY,CSW,CSH);
+  ctx.strokeStyle="#000";ctx.lineWidth=1.2;ctx.strokeRect(CSX,CSY,CSW,CSH);
 
-  // Section title
-  ctx.font="bold 9px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
-  ctx.fillText("CROSS SECTION (A-B)",CSX+CSW/2,CSY-8);ctx.textAlign="left";
+  // Title centered above
+  ctx.font="bold 10px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
+  ctx.fillText("CROSS SECTION (A-B)",CSX+CSW/2,CSY-9);
+  ctx.textAlign="left";
 
-  // A and B labels at top of section
-  ctx.font="bold 10px Times New Roman";ctx.fillStyle="#000";
-  ctx.fillText("A",CSX+4,CSY+14);ctx.textAlign="right";ctx.fillText("B",CSX+CSW-4,CSY+14);ctx.textAlign="left";
+  // A/B labels — bottom corners, outside box (matching reference)
+  ctx.font="bold 12px Times New Roman";ctx.fillStyle="#000";
+  ctx.textAlign="left";ctx.fillText("A",CSX,CSY+CSH+14);
+  ctx.textAlign="right";ctx.fillText("B",CSX+CSW,CSY+CSH+14);
+  ctx.textAlign="left";
 
-  // Depth scale
-  var mpp=(156543.03392*Math.cos(center.lat*Math.PI/180))/Math.pow(2,zoom);
-  var horizDistM=(abEastLon-abWestLon)*111320*Math.cos(abLat*Math.PI/180);
-  var maxDepthM=Math.round(horizDistM*0.5/100)*100; // 50% of horiz extent, rounded to 100m
-  if(maxDepthM<100)maxDepthM=100;
-  var VE=2; // vertical exaggeration
+  // Section drawing area (small margins inside box)
+  var MX=6,MY=12,MB=10;
+  var secX=CSX+MX,secW=CSW-MX*2;
+  var secY=CSY+MY,secH=CSH-MY-MB;
 
-  var depthLabelW=40;
-  var sectionX=CSX+depthLabelW,sectionW=CSW-depthLabelW-8,sectionY=CSY+20,sectionH=CSH-30;
+  // Horizontal distance in km for scale
+  var horizM=(abEastLon-abWestLon)*111320*Math.cos(abLat*Math.PI/180);
 
-  // Depth axis ticks
-  ctx.font="7px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="right";
-  var tickStep=maxDepthM<=200?50:100;
-  for(var d=0;d<=maxDepthM;d+=tickStep){
-    var ty=sectionY+d/maxDepthM*sectionH;
-    ctx.beginPath();ctx.moveTo(sectionX-4,ty);ctx.lineTo(sectionX,ty);ctx.strokeStyle="#000";ctx.lineWidth=0.7;ctx.stroke();
-    ctx.fillText(d+"m",sectionX-6,ty+3);
-  }
-  ctx.fillText("Depth",CSX+depthLabelW/2,CSY+sectionH/2);ctx.textAlign="left";
-
-  // VE label
-  ctx.font="7px Times New Roman";ctx.fillStyle="#555";ctx.textAlign="right";
-  ctx.fillText("V.E. = "+VE+"×",sectionX+sectionW,CSY+CSH-4);ctx.textAlign="left";
-
-  // Clip to section area
-  ctx.save();ctx.beginPath();ctx.rect(sectionX,sectionY,sectionW,sectionH);ctx.clip();
-
-  // For each geology zone, determine if and where A–B line intersects
-  // We use geographic coordinates to find intersections
-  // Then render blocks from west to east
-
-  // Build list of crossing events: {lon, zone, entering}
-  var crossings=[];
-  geoZones.forEach(function(z,zi){
-    if(z.points.length<3)return;
-    var poly=z.points.map(function(p){return[p.lon,p.lat];});
-    // Check each edge of polygon against the A–B horizontal line at abLat
-    for(var i=0;i<poly.length;i++){
-      var a=poly[i],b=poly[(i+1)%poly.length];
-      // Does edge cross abLat?
-      if((a[1]<=abLat&&b[1]>abLat)||(b[1]<=abLat&&a[1]>abLat)){
-        var t=(abLat-a[1])/(b[1]-a[1]);
-        var crossLon=a[0]+t*(b[0]-a[0]);
-        if(crossLon>=abWestLon&&crossLon<=abEastLon){
-          crossings.push({lon:crossLon,zoneIdx:zi});
-        }
-      }
+  // ── Sample A-B line at 500 points, point-in-polygon per zone ────────────────
+  var N=500,segments=[],prevZone=-1,segStart=0;
+  for(var si=0;si<=N;si++){
+    var frac=si/N;
+    var sLon=abWestLon+frac*(abEastLon-abWestLon);
+    var found=-1;
+    for(var zi=geoZones.length-1;zi>=0;zi--){
+      var z=geoZones[zi];if(z.points.length<3)continue;
+      var poly=z.points.map(function(p){return[p.lon,p.lat];});
+      if(pointInPolygon(sLon,abLat,poly)){found=zi;break;}
     }
-    // Also check if abLat is entirely inside the polygon
-  });
-
-  // Sort crossings west to east
-  crossings.sort(function(a,b){return a.lon-b.lon;});
-
-  // Build segments: for each pair of crossings of same zone, draw a block
-  // Simpler approach: sample the A–B line at regular intervals, find which zone each point is in
-  var NUM_SAMPLES=200;
-  var segments=[]; // {startFrac, endFrac, zoneIdx}
-  var prevZone=-1,segStart=0;
-  for(var si2=0;si2<=NUM_SAMPLES;si2++){
-    var frac=si2/NUM_SAMPLES;
-    var sampleLon=abWestLon+frac*(abEastLon-abWestLon);
-    var foundZone=-1;
-    for(var zi2=geoZones.length-1;zi2>=0;zi2--){
-      var z2=geoZones[zi2];if(z2.points.length<3)continue;
-      var poly2=z2.points.map(function(p){return[p.lon,p.lat];});
-      if(pointInPolygon(sampleLon,abLat,poly2)){foundZone=zi2;break;}
-    }
-    if(foundZone!==prevZone){
-      if(prevZone>=0)segments.push({startFrac:segStart,endFrac:frac,zoneIdx:prevZone});
-      prevZone=foundZone;segStart=frac;
+    if(found!==prevZone){
+      if(prevZone>=0)segments.push({f0:segStart,f1:frac,zi:prevZone});
+      prevZone=found;segStart=frac;
     }
   }
-  if(prevZone>=0)segments.push({startFrac:segStart,endFrac:1,zoneIdx:prevZone});
+  if(prevZone>=0)segments.push({f0:segStart,f1:1,zi:prevZone});
 
-  // Draw each segment as a colored block
+  // Clip to section box
+  ctx.save();ctx.beginPath();ctx.rect(secX,secY,secW,secH);ctx.clip();
+
+  // Background — tan/cream like reference
+  ctx.fillStyle="#f5f0e8";ctx.fillRect(secX,secY,secW,secH);
+
+  // ── Draw segments as smooth geological bands ─────────────────────────────────
+  // For each segment: draw trapezoid with dip-tilted top surface
+  // Outside-zone areas (found=-1) show background only
   segments.forEach(function(seg){
-    if(seg.zoneIdx<0)return;
-    var z=geoZones[seg.zoneIdx];
-    var x1=sectionX+seg.startFrac*sectionW;
-    var x2=sectionX+seg.endFrac*sectionW;
-    var blockW=x2-x1;
+    if(seg.zi<0)return;
+    var z=geoZones[seg.zi];
+    var x1=secX+seg.f0*secW;
+    var x2=secX+seg.f1*secW;
+    var bw=x2-x1;if(bw<0.5)return;
 
-    // Dip: if zone has dip data, tilt the top surface
-    var dipAngle=z.dip?parseFloat(z.dip):0;
-    var dipFrac=Math.tan(dipAngle*Math.PI/180)*VE; // fractional depth per unit distance
-    var leftDepthFrac=0,rightDepthFrac=0;
-    if(dipAngle>0&&z.strike){
-      // simplified: positive dip goes east (right)
-      var dxFrac=(x2-sectionX)/sectionW-(x1-sectionX)/sectionW;
-      leftDepthFrac=Math.max(0,(seg.startFrac-0.5)*dipFrac*0.5);
-      rightDepthFrac=Math.max(0,(seg.endFrac-0.5)*dipFrac*0.5);
-      leftDepthFrac=Math.min(leftDepthFrac,0.4);
-      rightDepthFrac=Math.min(rightDepthFrac,0.4);
-    }
+    var dipDeg=z.dip?Math.min(parseFloat(z.dip)||0,75):0;
 
-    var y1L=sectionY+leftDepthFrac*sectionH;
-    var y1R=sectionY+rightDepthFrac*sectionH;
-    var y2L=sectionY+sectionH;
-    var y2R=sectionY+sectionH;
+    // Compute dipped top surface Y for left and right edges of this segment
+    // Dip tilts the surface proportional to horizontal position relative to centre
+    var fracMidL=seg.f0-0.5;
+    var fracMidR=seg.f1-0.5;
+    var dipFactor=dipDeg>0?Math.tan(dipDeg*Math.PI/180)*2:0;
+    // Maximum dip drop = 50% of section height
+    var maxDrop=secH*0.5;
+    var y1L=secY+Math.max(0,Math.min(maxDrop,fracMidL*dipFactor*secH*0.5));
+    var y1R=secY+Math.max(0,Math.min(maxDrop,fracMidR*dipFactor*secH*0.5));
 
+    // Draw filled band (trapezoid: dipped top, flat bottom)
     ctx.beginPath();
-    ctx.moveTo(x1,y1L);ctx.lineTo(x2,y1R);ctx.lineTo(x2,y2R);ctx.lineTo(x1,y2L);ctx.closePath();
+    ctx.moveTo(x1,y1L);
+    ctx.lineTo(x2,y1R);
+    ctx.lineTo(x2,secY+secH);
+    ctx.lineTo(x1,secY+secH);
+    ctx.closePath();
     ctx.fillStyle=ROCK_COLORS[z.rock]||"#ccc";ctx.fill();
-    ctx.strokeStyle="#333";ctx.lineWidth=0.8;ctx.stroke();
 
-    // Formation label inside block
-    var midX=(x1+x2)/2,midY=(y1L+y1R)/2/2+sectionY+(sectionH-(y1L+y1R)/2)/2;
-    midY=sectionY+(y1L+y1R)/4+sectionH*0.4;
-    ctx.fillStyle="#000";ctx.font="7px Times New Roman";ctx.textAlign="center";
+    // Subtle band separator
+    ctx.strokeStyle="rgba(0,0,0,0.20)";ctx.lineWidth=0.6;ctx.stroke();
+
+    // Formation label centered in visible band area
     var lbl=z.formation&&z.formation.trim()?z.formation:z.rock;
-    if(blockW>ctx.measureText(lbl).width+4)ctx.fillText(lbl,midX,midY);
-    ctx.textAlign="left";
+    var midX=(x1+x2)/2;
+    var topMidY=(y1L+y1R)/2;
+    var bandH=(secY+secH)-topMidY;
+    var textY=topMidY+bandH*0.52;
+    ctx.fillStyle="#000";ctx.font="bold 9px Times New Roman";
+    var tw=ctx.measureText(lbl).width;
+    if(bw>tw+8&&bandH>16){
+      ctx.textAlign="center";ctx.fillText(lbl,midX,textY);ctx.textAlign="left";
+    }
   });
 
-  // Section surface line
-  ctx.strokeStyle="#000";ctx.lineWidth=1.5;
-  ctx.beginPath();ctx.moveTo(sectionX,sectionY);ctx.lineTo(sectionX+sectionW,sectionY);ctx.stroke();
+  // Surface datum line — flat black line across top of section
+  ctx.strokeStyle="#000";ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(secX,secY);ctx.lineTo(secX+secW,secY);ctx.stroke();
 
+  ctx.restore();
+
+  // Scale bar below cross-section — matching reference "0 1 2 4 Km" style
+  var mpp=(156543.03392*Math.cos(exportCenter.lat*Math.PI/180))/Math.pow(2,zoom);
+  var csScaleM=Math.round(horizM/4/1000)*1000||1000;
+  var csScalePx=csScaleM/mpp;
+  var sbx=CSX,sby=CSY+CSH+18;
+  ctx.font="8px Times New Roman";ctx.fillStyle="#555";ctx.textAlign="left";
+  ctx.fillText("Horizontal distance: "+Math.round(horizM/100)/10+" km",sbx,sby+10);
+  ctx.textAlign="left";
+}
+
+// ── WATERMARK ─────────────────────────────────────────────────────────────────
+function drawWatermark(){
+  ctx.save();
+  ctx.fillStyle="rgba(255,255,255,0.85)";ctx.fillRect(MAP_X,MAP_Y+MAP_H-14,260,14);
+  ctx.fillStyle="#888";ctx.font="7px sans-serif";
+  ctx.fillText("\u00a9 OpenStreetMap contributors | Geo Mapping System v0.7",MAP_X+4,MAP_Y+MAP_H-4);
   ctx.restore();
 }
 
-// ── MAIN DRAW ──────────────────────────────────────────────────────
+// ── DRAW ALL ──────────────────────────────────────────────────────────────────
 function drawAll(){
   ctx.clearRect(0,0,PW,PH);
   drawBorders();
-  drawTiles(mapType==="geo"?0.3:0.6);
-  drawMapFrame();
+  drawMapFrame();        // white fill for entire map frame
+  drawTiles();           // clipped to study boundary (0% geo, 18% sample)
   if(mapType==="geo")drawGeoZones();
-  drawStudyBoundary();
+  drawStudyBoundary();   // dashed boundary box
   drawRoads();
   drawRivers();
   drawTowns();
   drawSamples(mapType==="sample");
-  if(mapType==="geo"){drawZoneStrikeDip();drawABLine();}
+  if(mapType==="geo")drawStrikeDip();
+  if(mapType==="geo")drawABLine();
   drawGrid();
   drawNorthArrow();
-  drawScaleBar();
+  drawScaleBar();        // outside, below frame
   drawRightPanel();
   if(mapType==="geo")drawCrossSection();
-  // OSM attribution
-  ctx.save();ctx.fillStyle="rgba(255,255,255,0.8)";ctx.fillRect(MAP_X,MAP_Y+MAP_H-14,220,14);
-  ctx.fillStyle="#666";ctx.font="7px sans-serif";ctx.fillText("© OpenStreetMap contributors",MAP_X+3,MAP_Y+MAP_H-3);ctx.restore();
+  drawWatermark();
 }
 
-// ── TILE LOADING ───────────────────────────────────────────────────
+// ── TILE INIT ─────────────────────────────────────────────────────────────────
 function init(){
-  var cx2=lon2tile(center.lon,zoom),cy2=lat2tile(center.lat,zoom);
+  // For geo map tiles are unused — just draw immediately
+  if(mapType==="geo"){drawAll();return;}
+  var cx2=lon2tile(exportCenter.lon,zoom),cy2=lat2tile(exportCenter.lat,zoom);
   var range=Math.ceil(Math.max(MAP_W,MAP_H)/TILE_SIZE/2)+2,toLoad=[];
   for(var tx=cx2-range;tx<=cx2+range;tx++){
     for(var ty=cy2-range;ty<=cy2+range;ty++){
@@ -1157,55 +1241,94 @@ function init(){
     }
   }
   if(toLoad.length===0){drawAll();return;}
-  toLoad.forEach(function(t){loadTile(t.z,t.x,t.y,function(){drawAll();});});
-}
-
-// ── STATE GEOJSON FETCH ────────────────────────────────────────────
-function fetchStateData(){
-  // Try to fetch Nigeria states boundaries
-  var url="https://raw.githubusercontent.com/deldersveld/topojson/master/countries/nigeria/nigeria-states.json";
-  fetch(url).then(function(r){return r.json();}).then(function(data){
-    // This is TopoJSON — convert to GeoJSON
-    // Filter features for selected state if possible
-    if(data.objects){
-      // TopoJSON: find the main layer
-      var layerKey=Object.keys(data.objects)[0];
-      var features=[];
-      if(data.objects[layerKey]&&data.objects[layerKey].geometries){
-        // Build fake GeoJSON from topojson arcs (simplified — draw all arcs as boundaries)
-        stateGeoJSON={type:"FeatureCollection",features:[]};
-        // Just use the arcs to draw boundaries
-        stateGeoJSON._arcs=data.arcs;
-        stateGeoJSON._name=state;
-      }
-    }
-    drawAll();
-  }).catch(function(){
-    // Fetch failed — try alternative GeoJSON source
-    fetch("https://raw.githubusercontent.com/codeforgermany/click_that_hood/main/public/data/nigeria-states.geojson")
-    .then(function(r){return r.json();}).then(function(data){
-      // Filter to selected state's LGAs if possible, otherwise show all
-      stateGeoJSON=data;
-      drawAll();
-    }).catch(function(){drawAll();}); // proceed without inset data
+  var loaded=0,total=toLoad.length;
+  toLoad.forEach(function(t){
+    loadTile(t.z,t.x,t.y,function(){
+      loaded++;
+      if(loaded===1||loaded===total)drawAll();
+    });
   });
 }
 
-// ── EXPORT ─────────────────────────────────────────────────────────
+// ── FETCH live state outline — enhancement only, static fallback always shown ──
+function fetchStateData(){
+  // Normalize state name for matching
+  var raw=(state||"akwa ibom").toLowerCase().trim().replace(/\s*state\s*$/,"").trim();
+
+  // Every property key different GeoJSON sources use for the state name
+  var NAME_KEYS=["name","Name","NAME","statename","StateName","STATENAME",
+                 "admin1Name","STATE","state","State","shapeName","admin_name"];
+
+  function extractOutline(feat){
+    if(!feat||!feat.geometry)return null;
+    var geom=feat.geometry;
+    var rings=[];
+    if(geom.type==="Polygon"){
+      rings=[geom.coordinates[0]];
+    }else if(geom.type==="MultiPolygon"){
+      geom.coordinates.forEach(function(poly){if(poly[0])rings.push(poly[0]);});
+      // Largest ring = main landmass (not tiny coastal islands)
+      rings.sort(function(a,b){return b.length-a.length;});
+    }
+    if(!rings.length||!rings[0]||rings[0].length<4)return null;
+    return rings[0].map(function(c){return[c[0],c[1]];});
+  }
+
+  function matchFeature(features){
+    var exact=null,partial=null;
+    features.forEach(function(feat){
+      var props=feat.properties||{};
+      for(var k=0;k<NAME_KEYS.length;k++){
+        var val=(props[NAME_KEYS[k]]||"").toLowerCase().trim().replace(/\s*state\s*$/,"").trim();
+        if(!val)continue;
+        if(val===raw){exact=feat;return;}
+        if(!partial&&(val.indexOf(raw)>=0||raw.indexOf(val)>=0)){partial=feat;}
+      }
+    });
+    return exact||partial;
+  }
+
+  function trySource(url){
+    return fetch(url)
+      .then(function(r){if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
+      .then(function(data){
+        var features=data.features||[];
+        var match=matchFeature(features);
+        if(!match)throw new Error("no state match in "+url);
+        var outline=extractOutline(match);
+        if(!outline)throw new Error("no outline extracted");
+        stateGeoJSON={_stateOutline:outline};
+        drawAll(); // repaint with live outline
+        return true;
+      });
+  }
+
+  // Two sources — first success wins, static fallback always already showing
+  trySource(
+    "https://raw.githubusercontent.com/codeforgermany/click_that_hood/main/public/data/nigeria-states.geojson"
+  ).catch(function(){
+    return trySource(
+      "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_1_states_provinces.geojson"
+    );
+  }).catch(function(){
+    // Both failed — AKS_OUTLINE static shape already rendered, nothing to do
+  });
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────────
 function doExport(fmt){
   var SCALE=exportDPI/SCREEN_DPI;
   var hiCanvas=document.createElement("canvas");
   hiCanvas.width=Math.round(PW*SCALE);hiCanvas.height=Math.round(PH*SCALE);
   var hiCtx=hiCanvas.getContext("2d");
-  hiCtx.scale(SCALE,SCALE);
-  hiCtx.drawImage(canvas,0,0,PW,PH);
+  hiCtx.scale(SCALE,SCALE);hiCtx.drawImage(canvas,0,0,PW,PH);
   if(fmt==="pdf"){
-    if(!window.jspdf){alert("PDF library loading, try again.");return;}
+    if(!window.jspdf){alert("PDF library still loading \u2014 try again.");return;}
     var mm=pageSize==="A2"?{w:420,h:594}:{w:297,h:420};
     var doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:pageSize==="A2"?"a2":"a3"});
     doc.addImage(canvas.toDataURL("image/png",1.0),"PNG",0,0,mm.w,mm.h);
     doc.save(filename+".pdf");
-  } else {
+  }else{
     var mime=fmt==="jpeg"?"image/jpeg":"image/png";
     var ext=fmt==="jpeg"?"jpg":"png";
     hiCanvas.toBlob(function(blob){
@@ -1215,17 +1338,12 @@ function doExport(fmt){
     },mime,fmt==="jpeg"?0.95:undefined);
   }
 }
-
-// ── PAGE SIZE SWITCH ───────────────────────────────────────────────
 function switchSize(sz){
-  // Reload same page with new size parameter
-  window._pendingSize=sz;
   var msg=document.createElement("div");
   msg.style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#000;color:#f0c040;padding:20px 40px;border-radius:10px;font-family:sans-serif;font-size:16px;z-index:9999;";
   msg.innerText="To switch to "+sz+", regenerate the map from the editor and select "+sz+" in the Output tab.";
   document.body.appendChild(msg);setTimeout(function(){document.body.removeChild(msg);},3000);
 }
-
 window.doExport=doExport;window.switchSize=switchSize;
 fetchStateData();
 init();
@@ -1239,21 +1357,17 @@ const MODE_LABELS={pan:"✋ Pan",town:"🏘 Town","road-major":"🟠 Major Road"
 const MODE_COLORS={pan:"#2a2a4a",town:"#1a3a5a","road-major":"#5a2a00","road-minor":"#2a2a2a",river:"#003a5a",sample:"#5a1a1a",geology:"#2a1a5a",select:"#1a3a1a"};
 const DPI_OPTIONS=[{dpi:150,label:"150 dpi",desc:"Screen / digital"},{dpi:300,label:"300 dpi",desc:"Thesis standard"},{dpi:600,label:"600 dpi",desc:"NGSA publication"}];
 
-// ── MAIN COMPONENT ─────────────────────────────────────────────────────────────
 export default function GeoMappingSystem(){
   var [user,setUser]=useState(null);
   var [authLoading,setAuthLoading]=useState(true);
   var [currentProject,setCurrentProject]=useState(null);
   var [showDashboard,setShowDashboard]=useState(false);
   var [saveStatus,setSaveStatus]=useState("saved");
-
-  // Project meta fields (editable in editor)
   var [projName,setProjName]=useState("");
   var [projStudyArea,setProjStudyArea]=useState("");
   var [projLGA,setProjLGA]=useState("");
   var [projState,setProjState]=useState("Akwa Ibom");
   var [showProjInfo,setShowProjInfo]=useState(false);
-
   var canvasRef=useRef(null),containerRef=useRef(null);
   var [center,setCenter]=useState({lat:NIGERIA_CENTER[0],lon:NIGERIA_CENTER[1]});
   var [zoom,setZoom]=useState(NIGERIA_ZOOM);
@@ -1265,13 +1379,11 @@ export default function GeoMappingSystem(){
   var [exportDPI,setExportDPI]=useState(300);
   var [exportPageSize,setExportPageSize]=useState("A3");
   var [cursorLL,setCursorLL]=useState(null);
-
   var [towns,setTowns]=useState([]);
   var [roads,setRoads]=useState([]);
   var [rivers,setRivers]=useState([]);
   var [samples,setSamples]=useState([]);
   var [geoZones,setGeoZones]=useState([]);
-
   var [activeRoadIdx,setActiveRoadIdx]=useState(null);
   var [activeRiverIdx,setActiveRiverIdx]=useState(null);
   var [activeGeoIdx,setActiveGeoIdx]=useState(null);
@@ -1300,10 +1412,8 @@ export default function GeoMappingSystem(){
 
   async function loadProject(project){
     setCurrentProject(project);setShowDashboard(false);
-    setProjName(project.name||"");
-    setProjStudyArea(project.study_area||"");
-    setProjLGA(project.lga||"");
-    setProjState(project.state||"Akwa Ibom");
+    setProjName(project.name||"");setProjStudyArea(project.study_area||"");
+    setProjLGA(project.lga||"");setProjState(project.state||"Akwa Ibom");
     setCenter({lat:project.center_lat||NIGERIA_CENTER[0],lon:project.center_lon||NIGERIA_CENTER[1]});
     setZoom(project.zoom||NIGERIA_ZOOM);
     var [t,ro,ri,s,g]=await Promise.all([
@@ -1326,8 +1436,7 @@ export default function GeoMappingSystem(){
     setSaveStatus("saving");
     try{
       await supabase.from("projects").update({
-        name:projName||projStudyArea||"Untitled",
-        study_area:projStudyArea,lga:projLGA,state:projState,
+        name:projName||projStudyArea||"Untitled",study_area:projStudyArea,lga:projLGA,state:projState,
         center_lat:center.lat,center_lon:center.lon,zoom
       }).eq("id",currentProject.id);
       await Promise.all([
@@ -1349,12 +1458,15 @@ export default function GeoMappingSystem(){
   },[currentProject,user,projName,projStudyArea,projLGA,projState,center,zoom,towns,roads,rivers,samples,geoZones]);
 
   useEffect(function(){if(currentProject)setSaveStatus("unsaved");},[towns,roads,rivers,samples,geoZones,projStudyArea,projLGA,projState]);
+
+  var saveProjectRef=useRef(saveProject);
+  useEffect(function(){saveProjectRef.current=saveProject;},[saveProject]);
   useEffect(function(){
     if(!currentProject)return;
     if(autoSaveRef.current)clearInterval(autoSaveRef.current);
-    autoSaveRef.current=setInterval(function(){saveProject();},AUTO_SAVE_INTERVAL);
+    autoSaveRef.current=setInterval(function(){saveProjectRef.current();},AUTO_SAVE_INTERVAL);
     return function(){clearInterval(autoSaveRef.current);};
-  },[saveProject,currentProject]);
+  },[currentProject]);
 
   useEffect(function(){
     function upd(){if(containerRef.current){var r=containerRef.current.getBoundingClientRect();setSize({w:Math.floor(r.width)||800,h:Math.floor(r.height)||560});}}
@@ -1438,7 +1550,7 @@ export default function GeoMappingSystem(){
     var mpp=(156543.03392*Math.cos(center.lat*Math.PI/180))/Math.pow(2,zoom),bm=zoom>=12?500:zoom>=10?2000:zoom>=8?20000:zoom>=6?100000:500000,bp=bm/mpp,sx=10,sy=H-20;
     ctx.save();ctx.fillStyle="rgba(255,255,255,0.88)";ctx.fillRect(sx-3,sy-12,bp+6,18);ctx.fillStyle="#222";ctx.fillRect(sx,sy-6,bp/2,7);ctx.fillStyle="#999";ctx.fillRect(sx+bp/2,sy-6,bp/2,7);ctx.strokeStyle="#222";ctx.lineWidth=1;ctx.strokeRect(sx,sy-6,bp,7);ctx.fillStyle="#222";ctx.font="8px sans-serif";ctx.fillText("0",sx,sy-8);ctx.fillText(bm>=1000?bm/1000+"km":bm+"m",sx+bp-6,sy-8);ctx.restore();
     ctx.save();ctx.fillStyle="rgba(0,0,0,0.55)";ctx.fillRect(8,8,160,22);ctx.fillStyle="#f0c040";ctx.font="bold 11px sans-serif";ctx.fillText("MODE: "+MODE_LABELS[mode],14,23);ctx.restore();
-    ctx.save();ctx.fillStyle="rgba(255,255,255,0.7)";ctx.fillRect(W-185,H-15,185,15);ctx.fillStyle="#666";ctx.font="8px sans-serif";ctx.fillText("\u00a9 OpenStreetMap contributors",W-182,H-4);ctx.restore();
+    ctx.save();ctx.fillStyle="rgba(255,255,255,0.7)";ctx.fillRect(W-185,H-15,185,15);ctx.fillStyle="#666";ctx.font="8px sans-serif";ctx.fillText("© OpenStreetMap contributors",W-182,H-4);ctx.restore();
   },[tiles,center,zoom,tick,towns,roads,rivers,samples,geoZones,activeRoadIdx,activeRiverIdx,activeGeoIdx,mousePos,mode,geoRock,W,H,previewPin,selectedFeature]);
 
   function getLL(e){var r=canvasRef.current.getBoundingClientRect();return px2ll((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height),center.lat,center.lon,zoom,W,H);}
@@ -1488,7 +1600,6 @@ export default function GeoMappingSystem(){
     else if(t==="geology"){setGeoZones(function(a){return a.filter(function(_,i){return i!==id;});});setActiveGeoIdx(null);}
     setSelectedFeature(null);
   }
-
   function saveSelected(updates){
     if(!selectedFeature)return;
     var t=selectedFeature.type,id=selectedFeature.id;
@@ -1530,7 +1641,6 @@ export default function GeoMappingSystem(){
   }
 
   var getMeta=useCallback(function(){return{studyArea:projStudyArea,lga:projLGA,state:projState};},[projStudyArea,projLGA,projState]);
-
   var openMap=useCallback(function(type){
     var data={towns,roads,rivers,samples,geoZones,center,zoom};
     var html=renderMap(type,data,getMeta(),exportDPI,exportPageSize);
@@ -1558,7 +1668,6 @@ export default function GeoMappingSystem(){
 
   return(
     <div style={{background:"#0d0d1f",height:"100vh",fontFamily:"sans-serif",color:"#eee",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      {/* Header */}
       <div style={{background:"#12122e",borderBottom:"1px solid #2a2a5a",padding:"7px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:30,height:30,background:"#f0c040",borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🗺</div>
@@ -1578,32 +1687,16 @@ export default function GeoMappingSystem(){
         </div>
       </div>
 
-      {/* Project Info Panel */}
       {showProjInfo&&(
         <div style={{background:"#0a0a1e",borderBottom:"1px solid #2a2a5a",padding:"10px 14px",display:"flex",gap:12,alignItems:"flex-end",flexShrink:0}}>
-          <div style={{flex:2}}>
-            <div style={LABEL}>Study Area Name</div>
-            <input value={projStudyArea} onChange={function(e){setProjStudyArea(e.target.value);}} placeholder="e.g. Ogu Itumbuoso" style={Object.assign({},INP,{marginBottom:0})}/>
-          </div>
-          <div style={{flex:1}}>
-            <div style={LABEL}>LGA</div>
-            <input value={projLGA} onChange={function(e){setProjLGA(e.target.value);}} placeholder="e.g. Itu" style={Object.assign({},INP,{marginBottom:0})}/>
-          </div>
-          <div style={{flex:1}}>
-            <div style={LABEL}>State</div>
-            <select value={projState} onChange={function(e){setProjState(e.target.value);}} style={Object.assign({},SEL,{marginBottom:0})}>
-              {NIGERIA_STATES.map(function(s){return <option key={s}>{s}</option>;})}
-            </select>
-          </div>
-          <div style={{flex:2}}>
-            <div style={LABEL}>Project Name (optional)</div>
-            <input value={projName} onChange={function(e){setProjName(e.target.value);}} placeholder="Defaults to study area name" style={Object.assign({},INP,{marginBottom:0})}/>
-          </div>
+          <div style={{flex:2}}><div style={LABEL}>Study Area Name</div><input value={projStudyArea} onChange={function(e){setProjStudyArea(e.target.value);}} placeholder="e.g. Ogu Itumbuoso" style={Object.assign({},INP,{marginBottom:0})}/></div>
+          <div style={{flex:1}}><div style={LABEL}>LGA</div><input value={projLGA} onChange={function(e){setProjLGA(e.target.value);}} placeholder="e.g. Itu" style={Object.assign({},INP,{marginBottom:0})}/></div>
+          <div style={{flex:1}}><div style={LABEL}>State</div><select value={projState} onChange={function(e){setProjState(e.target.value);}} style={Object.assign({},SEL,{marginBottom:0})}>{NIGERIA_STATES.map(function(s){return <option key={s}>{s}</option>;})}</select></div>
+          <div style={{flex:2}}><div style={LABEL}>Project Name (optional)</div><input value={projName} onChange={function(e){setProjName(e.target.value);}} placeholder="Defaults to study area name" style={Object.assign({},INP,{marginBottom:0})}/></div>
           <button onClick={function(){saveProject();setShowProjInfo(false);}} style={Object.assign({},btnBase,{background:"#27ae60",color:"#fff",padding:"5px 14px",fontSize:10,flexShrink:0})}>✓ Save Info</button>
         </div>
       )}
 
-      {/* Toolbar */}
       <div style={{background:"#0a0a20",borderBottom:"1px solid #2a2a5a",padding:"6px 10px",display:"flex",gap:4,alignItems:"center",flexShrink:0,overflowX:"auto"}}>
         {MODES.map(function(m){return(
           <button key={m} onClick={function(){setMode(m);if(m==="pan"){setActiveRoadIdx(null);setActiveRiverIdx(null);setActiveGeoIdx(null);}if(m!=="select")setSelectedFeature(null);}}
@@ -1619,7 +1712,6 @@ export default function GeoMappingSystem(){
       </div>
 
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-        {/* Canvas */}
         <div ref={containerRef} style={{flex:1,position:"relative",overflow:"hidden"}}>
           <canvas ref={canvasRef} width={W} height={H}
             onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
@@ -1636,14 +1728,11 @@ export default function GeoMappingSystem(){
           {mode==="select"&&(<div style={{position:"absolute",bottom:28,left:"50%",transform:"translateX(-50%)",background:"rgba(0,20,0,0.85)",color:"#27ae60",borderRadius:8,padding:"6px 14px",fontSize:11}}>Click any feature to select &amp; edit attributes</div>)}
         </div>
 
-        {/* Sidebar */}
         <div style={{width:252,background:"#0a0a1e",borderLeft:"1px solid #2a2a5a",display:"flex",flexDirection:"column",flexShrink:0}}>
           <div style={{display:"flex",borderBottom:"1px solid #2a2a5a"}}>
             {["draw","data","output"].map(function(t){return(<button key={t} onClick={function(){setTab(t);}} style={Object.assign({},btnBase,{flex:1,padding:"8px 4px",fontSize:10,background:tab===t?"#1a1a3a":"transparent",color:tab===t?"#f0c040":"#555",borderRadius:0,borderBottom:tab===t?"2px solid #f0c040":"2px solid transparent"})}>{t==="draw"?"✏️ Draw":t==="data"?"📊 Data":"🗺 Output"}</button>);})}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:12}}>
-
-            {/* DRAW TAB */}
             {tab==="draw"&&(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {mode==="select"&&(selectedFeature?(
@@ -1663,8 +1752,6 @@ export default function GeoMappingSystem(){
                 <button onClick={clearAll} style={Object.assign({},btnBase,{background:"#3a1a1a",color:"#e74c3c",border:"1px solid #e74c3c",padding:"7px",fontSize:10,width:"100%"})}>🗑 Clear All Features</button>
               </div>
             )}
-
-            {/* DATA TAB */}
             {tab==="data"&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 <CompletenessBar score={completeness}/>
@@ -1674,49 +1761,34 @@ export default function GeoMappingSystem(){
                 {geoZones.length>0&&(<div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}><div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>GEOLOGY ZONES</div>{geoZones.map(function(z,i){var sc=scoreFeature("geology",z),pct=Math.round(sc.score/sc.max*100);return(<div key={i} style={{borderBottom:"1px solid #1a1a3a",padding:"5px 0",cursor:"pointer"}} onClick={function(){setSelectedFeature({type:"geology",id:i});setTab("draw");setMode("select");}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}><div style={{width:10,height:10,background:ROCK_COLORS[z.rock]||"#ccc",borderRadius:2,flexShrink:0}}/><span style={{fontSize:10,color:"#cca0ff",fontWeight:"bold",flex:1}}>{z.formation||z.rock}</span><span style={{fontSize:9,color:pct===100?"#27ae60":pct>=60?"#f0c040":"#e74c3c"}}>{pct}%</span></div><div style={{fontSize:9,color:"#666",marginLeft:16}}>{z.rock} · {z.period} · {z.points.length} nodes{z.dip?" · dip "+z.dip+"°":""}</div></div>);})}</div>)}
               </div>
             )}
-
-            {/* OUTPUT TAB */}
             {tab==="output"&&(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {validationErrors.length>0&&<ValidationBanner errors={validationErrors}/>}
-
-                {/* Project info summary */}
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>MAP TITLE PREVIEW</div>
                   <div style={{fontSize:10,color:"#fff",lineHeight:1.8}}>
-                    {projStudyArea?(
-                      <><div style={{fontWeight:"bold"}}>SAMPLE LOCATION MAP OF {projStudyArea.toUpperCase()}</div><div>IN {projLGA?projLGA.toUpperCase()+", ":""}{projState.toUpperCase()} STATE</div></>
-                    ):<div style={{color:"#555"}}>Set Study Area, LGA & State in ⚙ Project Info above</div>}
+                    {projStudyArea?(<><div style={{fontWeight:"bold"}}>SAMPLE LOCATION MAP OF {projStudyArea.toUpperCase()}</div><div>IN {projLGA?projLGA.toUpperCase()+", ":""}{projState.toUpperCase()} STATE</div></>):<div style={{color:"#555"}}>Set Study Area, LGA &amp; State in ⚙ Project Info above</div>}
                   </div>
                 </div>
-
-                {/* Page size */}
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:8}}>PAGE SIZE</div>
                   <div style={{display:"flex",gap:6}}>
                     {["A3","A2"].map(function(sz){return(
-                      <button key={sz} onClick={function(){setExportPageSize(sz);}}
-                        style={Object.assign({},btnBase,{flex:1,padding:"8px",fontSize:11,background:exportPageSize===sz?"#1a3a1a":"#0f0f2a",color:exportPageSize===sz?"#27ae60":"#aaa",border:"1px solid "+(exportPageSize===sz?"#27ae60":"#2a2a5a")})}>
+                      <button key={sz} onClick={function(){setExportPageSize(sz);}} style={Object.assign({},btnBase,{flex:1,padding:"8px",fontSize:11,background:exportPageSize===sz?"#1a3a1a":"#0f0f2a",color:exportPageSize===sz?"#27ae60":"#aaa",border:"1px solid "+(exportPageSize===sz?"#27ae60":"#2a2a5a")})}>
                         {sz}<br/><span style={{fontSize:9,fontWeight:"normal",color:exportPageSize===sz?"#8fbb8f":"#444"}}>{sz==="A3"?"297×420mm":"420×594mm"}</span>
                       </button>
                     );})}
                   </div>
                 </div>
-
-                {/* DPI */}
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:8}}>EXPORT QUALITY</div>
                   {DPI_OPTIONS.map(function(opt){var active=exportDPI===opt.dpi;return(<div key={opt.dpi} onClick={function(){setExportDPI(opt.dpi);}} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:active?"#1a3a1a":"#0f0f2a",border:"1px solid "+(active?"#27ae60":"#2a2a5a"),borderRadius:5,padding:"6px 8px",marginBottom:4,cursor:"pointer"}}><span style={{fontSize:11,fontWeight:"bold",color:active?"#27ae60":"#aaa"}}>{opt.label}</span><span style={{fontSize:9,color:active?"#8fbb8f":"#444"}}>{opt.desc}</span>{active&&<span style={{fontSize:9,color:"#27ae60"}}>✓</span>}</div>);})}
                 </div>
-
-                {/* Generate maps */}
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:8}}>GENERATE MAPS</div>
                   <button onClick={function(){openMap("sample");}} style={Object.assign({},btnBase,{width:"100%",background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"10px",fontSize:11,marginBottom:8})}>📄 Sample Location Map<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>{exportPageSize} · {exportDPI}dpi · opens in new tab</span></button>
                   <button onClick={function(){openMap("geo");}} style={Object.assign({},btnBase,{width:"100%",background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"10px",fontSize:11})}>🪨 Geologic Map<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>{exportPageSize} · {exportDPI}dpi · with cross-section</span></button>
                 </div>
-
-                {/* GIS Export */}
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>GIS EXPORT</div>
                   <div style={{fontSize:9,color:"#555",marginBottom:8}}>Export for QGIS, ArcGIS, Google Earth, or Excel.</div>
@@ -1724,10 +1796,9 @@ export default function GeoMappingSystem(){
                   <button onClick={function(){exportKML(towns,roads,rivers,samples,geoZones,projStudyArea||"Study_Area");}} style={Object.assign({},btnBase,{width:"100%",background:"#0a1a2a",color:"#4a9adf",border:"1px solid #4a9adf",padding:"7px",fontSize:10,marginBottom:5})}>⬇ KML — Google Earth</button>
                   <button onClick={function(){exportCSV(samples,projStudyArea||"Study_Area");}} style={Object.assign({},btnBase,{width:"100%",background:"#1a1a0a",color:"#f0c040",border:"1px solid #f0c040",padding:"7px",fontSize:10})}>⬇ CSV — Sample Data (Excel)</button>
                 </div>
-
                 <div style={{background:"#0f0f1e",border:"1px dashed #2a2a4a",borderRadius:8,padding:10}}>
-                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 7</div>
-                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>GPS + file import (GPX, KML, CSV upload).</div>
+                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 8</div>
+                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>Map type selection at project creation.</div>
                 </div>
               </div>
             )}
@@ -1736,7 +1807,7 @@ export default function GeoMappingSystem(){
       </div>
 
       <div style={{background:"#0a0a1e",borderTop:"1px solid #2a2a5a",padding:"4px 14px",display:"flex",justifyContent:"space-between",flexShrink:0}}>
-        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v0.7 — Map Output Redesign</span>
+        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v0.7 — Seq 7 Fixed</span>
         <span style={{fontSize:9,color:"#333"}}>Nigeria · WGS84 · OpenStreetMap · {user?.email}</span>
       </div>
     </div>
