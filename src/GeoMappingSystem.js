@@ -182,29 +182,85 @@ function AuthScreen(){
   );
 }
 
+// ── Map type definitions ──────────────────────────────────────────────────────
+var MAP_TYPE_DEFS = [
+  {key:"sample", label:"Sample Location Map", icon:"📄", color:"#4a9adf", available:true},
+  {key:"geo",    label:"Geologic Map",         icon:"🪨", color:"#9b59b6", available:true},
+  {key:"topo",   label:"Topographic Map",      icon:"🏔", color:"#555",    available:false, soon:"Seq 10"},
+  {key:"strat",  label:"Stratigraphic Column", icon:"📊", color:"#e67e22", available:true},
+];
+
+function MapTypeBadge({mapTypes}){
+  var types = mapTypes||["sample","geo"];
+  var active = MAP_TYPE_DEFS.filter(function(d){return types.indexOf(d.key)>=0;});
+  return(
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
+      {active.map(function(d){return(
+        <span key={d.key} style={{fontSize:8,fontWeight:"bold",color:d.color,border:"1px solid "+d.color,borderRadius:10,padding:"1px 6px",background:"rgba(0,0,0,0.3)"}}>{d.icon} {d.label}</span>
+      );})}
+    </div>
+  );
+}
+
 function Dashboard({user,onOpen,onSignOut}){
   var [projects,setProjects]=useState([]);
   var [loading,setLoading]=useState(true);
   var [creating,setCreating]=useState(false);
-  var [form,setForm]=useState({name:"",studyArea:"",lga:"",state:"Akwa Ibom"});
+  var [form,setForm]=useState({name:"",studyArea:"",lga:"",state:"Akwa Ibom",mapTypes:["sample","geo"]});
   var [deleting,setDeleting]=useState(null);
   useEffect(function(){loadProjects();},[]);
+
   async function loadProjects(){
     setLoading(true);
     var {data,error}=await supabase.from("projects").select("*").order("updated_at",{ascending:false});
     if(!error)setProjects(data||[]);
     setLoading(false);
   }
-  async function createProject(){
-    var name=form.name.trim()||form.studyArea.trim()||"Untitled Project";
-    var {data,error}=await supabase.from("projects").insert({user_id:user.id,name,study_area:form.studyArea.trim(),lga:form.lga.trim(),state:form.state}).select().single();
-    if(!error&&data){setCreating(false);setForm({name:"",studyArea:"",lga:"",state:"Akwa Ibom"});onOpen(data);}
+
+  function toggleMapType(key){
+    setForm(function(f){
+      var current=f.mapTypes||["sample","geo"];
+      var next=current.indexOf(key)>=0
+        ? current.filter(function(k){return k!==key;})
+        : current.concat([key]);
+      // Must have at least one active type
+      if(next.length===0)return f;
+      return Object.assign({},f,{mapTypes:next});
+    });
   }
+
+  async function createProject(){
+    if(!form.studyArea.trim()){return;}
+    var name=form.name.trim()||form.studyArea.trim()||"Untitled Project";
+    var mapTypes=form.mapTypes.length>0?form.mapTypes:["sample","geo"];
+    var {data,error}=await supabase.from("projects").insert({
+      user_id:user.id,name,
+      study_area:form.studyArea.trim(),
+      lga:form.lga.trim(),
+      state:form.state,
+      map_types:mapTypes
+    }).select().single();
+    if(!error&&data){
+      setCreating(false);
+      setForm({name:"",studyArea:"",lga:"",state:"Akwa Ibom",mapTypes:["sample","geo"]});
+      onOpen(data);
+    }
+  }
+
   async function deleteProject(id){
     await supabase.from("projects").delete().eq("id",id);
-    setDeleting(null);setProjects(function(p){return p.filter(function(x){return x.id!==id;});});
+    setDeleting(null);
+    setProjects(function(p){return p.filter(function(x){return x.id!==id;});});
   }
-  function fmt(ts){var d=new Date(ts),now=new Date(),diff=Math.floor((now-d)/1000);if(diff<60)return "just now";if(diff<3600)return Math.floor(diff/60)+"m ago";if(diff<86400)return Math.floor(diff/3600)+"h ago";return d.toLocaleDateString();}
+
+  function fmt(ts){
+    var d=new Date(ts),now=new Date(),diff=Math.floor((now-d)/1000);
+    if(diff<60)return "just now";
+    if(diff<3600)return Math.floor(diff/60)+"m ago";
+    if(diff<86400)return Math.floor(diff/3600)+"h ago";
+    return d.toLocaleDateString();
+  }
+
   return(
     <div style={{background:"#0d0d1f",height:"100vh",fontFamily:"sans-serif",color:"#eee",display:"flex",flexDirection:"column"}}>
       <div style={{background:"#12122e",borderBottom:"1px solid #2a2a5a",padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -214,48 +270,116 @@ function Dashboard({user,onOpen,onSignOut}){
         </div>
         <button onClick={onSignOut} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"5px 12px",fontSize:10,cursor:"pointer"}}>Sign Out</button>
       </div>
+
       <div style={{flex:1,overflowY:"auto",padding:24,maxWidth:800,margin:"0 auto",width:"100%"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
           <div style={{fontSize:18,fontWeight:"bold",color:"#f0c040"}}>My Projects</div>
           <button onClick={function(){setCreating(true);}} style={{background:"#27ae60",color:"#fff",border:"none",borderRadius:7,padding:"8px 16px",fontSize:11,fontWeight:"bold",cursor:"pointer"}}>+ New Project</button>
         </div>
+
         {creating&&(
           <div style={{background:"#12122e",border:"1px solid #27ae60",borderRadius:10,padding:16,marginBottom:16}}>
             <div style={{fontSize:11,color:"#27ae60",fontWeight:"bold",marginBottom:12}}>New Project</div>
+
+            {/* Study area + LGA */}
             <div style={{display:"flex",gap:8,marginBottom:8}}>
-              <div style={{flex:1}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Study Area Name *</div><input value={form.studyArea} onChange={function(e){setForm(function(f){return Object.assign({},f,{studyArea:e.target.value});});}} placeholder="e.g. Ogu Itumbuoso" autoFocus style={Object.assign({},INP,{marginBottom:0})}/></div>
-              <div style={{flex:1}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>LGA</div><input value={form.lga} onChange={function(e){setForm(function(f){return Object.assign({},f,{lga:e.target.value});});}} placeholder="e.g. Itu" style={Object.assign({},INP,{marginBottom:0})}/></div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Study Area Name *</div>
+                <input value={form.studyArea} onChange={function(e){setForm(function(f){return Object.assign({},f,{studyArea:e.target.value});});}} placeholder="e.g. Ogu Itumbuoso" autoFocus style={Object.assign({},INP,{marginBottom:0})}/>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>LGA</div>
+                <input value={form.lga} onChange={function(e){setForm(function(f){return Object.assign({},f,{lga:e.target.value});});}} placeholder="e.g. Itu" style={Object.assign({},INP,{marginBottom:0})}/>
+              </div>
             </div>
-            <div style={{marginBottom:8}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>State</div><select value={form.state} onChange={function(e){setForm(function(f){return Object.assign({},f,{state:e.target.value});});}} style={SEL}>{NIGERIA_STATES.map(function(s){return <option key={s}>{s}</option>;})}</select></div>
-            <div style={{marginBottom:12}}><div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Project Name (optional)</div><input value={form.name} onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}} onKeyDown={function(e){if(e.key==="Enter")createProject();}} placeholder="e.g. Ogu-Itumbuoso Geological Survey 2025" style={Object.assign({},INP,{marginBottom:0})}/></div>
+
+            {/* State */}
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>State</div>
+              <select value={form.state} onChange={function(e){setForm(function(f){return Object.assign({},f,{state:e.target.value});});}} style={SEL}>
+                {NIGERIA_STATES.map(function(s){return <option key={s}>{s}</option>;})}
+              </select>
+            </div>
+
+            {/* ── MAP TYPE SELECTOR ── */}
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:9,color:"#7ab",marginBottom:6}}>Map Types *</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                {MAP_TYPE_DEFS.map(function(d){
+                  var active=(form.mapTypes||[]).indexOf(d.key)>=0;
+                  return(
+                    <div key={d.key} onClick={function(){if(d.available)toggleMapType(d.key);}}
+                      style={{
+                        display:"flex",alignItems:"center",gap:8,
+                        background:active&&d.available?"#1a2a1a":"#0f0f20",
+                        border:"1px solid "+(active&&d.available?d.color:"#2a2a4a"),
+                        borderRadius:6,padding:"8px 10px",
+                        cursor:d.available?"pointer":"not-allowed",
+                        opacity:d.available?1:0.45,
+                        transition:"all 0.15s"
+                      }}>
+                      <div style={{
+                        width:16,height:16,borderRadius:3,flexShrink:0,
+                        background:active&&d.available?d.color:"transparent",
+                        border:"2px solid "+(d.available?d.color:"#444"),
+                        display:"flex",alignItems:"center",justifyContent:"center",fontSize:10
+                      }}>{active&&d.available?"✓":""}</div>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:"bold",color:d.available?d.color:"#555"}}>
+                          {d.icon} {d.label}
+                        </div>
+                        {!d.available&&<div style={{fontSize:8,color:"#444"}}>Coming {d.soon}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Project name */}
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:9,color:"#7ab",marginBottom:3}}>Project Name (optional)</div>
+              <input value={form.name} onChange={function(e){setForm(function(f){return Object.assign({},f,{name:e.target.value});});}} onKeyDown={function(e){if(e.key==="Enter")createProject();}} placeholder="e.g. Ogu-Itumbuoso Geological Survey 2025" style={Object.assign({},INP,{marginBottom:0})}/>
+            </div>
+
             <div style={{display:"flex",gap:8}}>
               <button onClick={createProject} style={{flex:1,background:"#27ae60",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:11,fontWeight:"bold",cursor:"pointer"}}>✓ Create Project</button>
               <button onClick={function(){setCreating(false);}} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"8px 14px",fontSize:11,cursor:"pointer"}}>Cancel</button>
             </div>
           </div>
         )}
-        {loading?(<div style={{textAlign:"center",padding:40,color:"#555"}}>Loading projects…</div>)
-        :projects.length===0?(<div style={{textAlign:"center",padding:60,color:"#333"}}><div style={{fontSize:32,marginBottom:12}}>🗺</div><div style={{fontSize:14,color:"#555",marginBottom:8}}>No projects yet</div><div style={{fontSize:11,color:"#333"}}>Create your first project to get started</div></div>)
-        :(<div style={{display:"flex",flexDirection:"column",gap:10}}>{projects.map(function(p){return(
-          <div key={p.id} style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:10,padding:16,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={function(){if(deleting!==p.id)onOpen(p);}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:"bold",color:"#f0c040",marginBottom:2}}>{p.name||p.study_area||"Untitled"}</div>
-              {p.study_area&&<div style={{fontSize:10,color:"#7ab",marginBottom:2}}>{p.study_area}{p.lga?" · "+p.lga:""}{p.state?" · "+p.state+" State":""}</div>}
-              <div style={{fontSize:10,color:"#555"}}>Last saved {fmt(p.updated_at)}</div>
-            </div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <button onClick={function(e){e.stopPropagation();onOpen(p);}} style={{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",borderRadius:6,padding:"6px 14px",fontSize:10,fontWeight:"bold",cursor:"pointer"}}>Open →</button>
-              {deleting===p.id?(
-                <div style={{display:"flex",gap:4}}>
-                  <button onClick={function(e){e.stopPropagation();deleteProject(p.id);}} style={{background:"#3a0a0a",color:"#e74c3c",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 10px",fontSize:10,cursor:"pointer",fontWeight:"bold"}}>Delete</button>
-                  <button onClick={function(e){e.stopPropagation();setDeleting(null);}} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"6px 8px",fontSize:10,cursor:"pointer"}}>✕</button>
-                </div>
-              ):(
-                <button onClick={function(e){e.stopPropagation();setDeleting(p.id);}} style={{background:"transparent",color:"#3a3a6a",border:"none",borderRadius:6,padding:"6px 8px",fontSize:12,cursor:"pointer"}}>🗑</button>
-              )}
-            </div>
-          </div>
-        );})}</div>)}
+
+        {loading
+          ?(<div style={{textAlign:"center",padding:40,color:"#555"}}>Loading projects…</div>)
+          :projects.length===0
+            ?(<div style={{textAlign:"center",padding:60,color:"#333"}}>
+                <div style={{fontSize:32,marginBottom:12}}>🗺</div>
+                <div style={{fontSize:14,color:"#555",marginBottom:8}}>No projects yet</div>
+                <div style={{fontSize:11,color:"#333"}}>Create your first project to get started</div>
+              </div>)
+            :(<div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {projects.map(function(p){return(
+                  <div key={p.id} style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:10,padding:16,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={function(){if(deleting!==p.id)onOpen(p);}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:"bold",color:"#f0c040",marginBottom:2}}>{p.name||p.study_area||"Untitled"}</div>
+                      {p.study_area&&<div style={{fontSize:10,color:"#7ab",marginBottom:3}}>{p.study_area}{p.lga?" · "+p.lga:""}{p.state?" · "+p.state+" State":""}</div>}
+                      <MapTypeBadge mapTypes={p.map_types}/>
+                      <div style={{fontSize:10,color:"#555",marginTop:4}}>Last saved {fmt(p.updated_at)}</div>
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <button onClick={function(e){e.stopPropagation();onOpen(p);}} style={{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",borderRadius:6,padding:"6px 14px",fontSize:10,fontWeight:"bold",cursor:"pointer"}}>Open →</button>
+                      {deleting===p.id
+                        ?(<div style={{display:"flex",gap:4}}>
+                            <button onClick={function(e){e.stopPropagation();deleteProject(p.id);}} style={{background:"#3a0a0a",color:"#e74c3c",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 10px",fontSize:10,cursor:"pointer",fontWeight:"bold"}}>Delete</button>
+                            <button onClick={function(e){e.stopPropagation();setDeleting(null);}} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"6px 8px",fontSize:10,cursor:"pointer"}}>✕</button>
+                          </div>)
+                        :(<button onClick={function(e){e.stopPropagation();setDeleting(p.id);}} style={{background:"transparent",color:"#3a3a6a",border:"none",borderRadius:6,padding:"6px 8px",fontSize:12,cursor:"pointer"}}>🗑</button>)
+                      }
+                    </div>
+                  </div>
+                );})}
+              </div>)
+        }
       </div>
     </div>
   );
@@ -306,15 +430,28 @@ function SampleEditPanel({sample,allSamples,editingIdx,onSave,onDelete,onDeselec
   );
 }
 
-function GeoEditPanel({zone,onSave,onDelete,onDeselect}){
+function GeoEditPanel({zone,onSave,onDelete,onDeselect,stratFormations}){
   var [f,setF]=useState(Object.assign({rock:"Shale",formation:"",period:"Unknown",contact:"Unknown",strike:"",dip:""},zone));
   function upd(k,v){setF(function(p){return Object.assign({},p,{[k]:v});});}
+  var stratNames=(stratFormations||[]).map(function(s){return s.name;}).filter(Boolean);
   return(
     <div style={{background:"#12122e",border:"1px solid #2a1a5a",borderRadius:8,padding:10}}>
       <div style={{fontSize:11,color:"#9b59b6",fontWeight:"bold",marginBottom:8}}>🪨 EDIT GEOLOGY ZONE</div>
       <Field label="Rock Type"><select value={f.rock||"Shale"} onChange={function(e){upd("rock",e.target.value);}} style={SEL}>{ROCK_TYPES.map(function(r){return <option key={r}>{r}</option>;})}</select></Field>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><div style={{width:16,height:16,background:ROCK_COLORS[f.rock]||"#ccc",borderRadius:3,border:"1px solid #fff",flexShrink:0}}/><span style={{fontSize:9,color:"#888"}}>{f.rock}</span></div>
-      <Field label="Formation Name"><input value={f.formation||""} onChange={function(e){upd("formation",e.target.value);}} placeholder="e.g. Asu River Group" style={INP}/></Field>
+      <Field label="Formation Name">
+        {stratNames.length>0?(
+          <select value={f.formation||""} onChange={function(e){upd("formation",e.target.value);}} style={SEL}>
+            <option value="">— Select formation —</option>
+            {stratNames.map(function(n){return <option key={n} value={n}>{n}</option>;})}
+            <option value="__custom__">Other (type below)</option>
+          </select>
+        ):null}
+        {(stratNames.length===0||f.formation==="__custom__")&&(
+          <input value={f.formation==="__custom__"?"":f.formation||""} onChange={function(e){upd("formation",e.target.value);}} placeholder="e.g. Asu River Group" style={INP}/>
+        )}
+        {stratNames.length>0&&<div style={{fontSize:8,color:"#555",marginTop:-3,marginBottom:4}}>From your stratigraphic column</div>}
+      </Field>
       <Field label="Geological Period"><select value={f.period||"Unknown"} onChange={function(e){upd("period",e.target.value);}} style={SEL}>{GEO_PERIODS.map(function(p){return <option key={p}>{p}</option>;})}</select></Field>
       <Field label="Contact Type"><select value={f.contact||"Unknown"} onChange={function(e){upd("contact",e.target.value);}} style={SEL}>{CONTACT_TYPES.map(function(c){return <option key={c}>{c}</option>;})}</select></Field>
       <div style={{fontSize:10,color:"#f0c040",fontWeight:"bold",marginTop:6,marginBottom:4}}>Cross-Section Dip (optional)</div>
@@ -1351,6 +1488,374 @@ init();
   return html;
 }
 
+// ── STRATIGRAPHIC COLUMN RENDERER ────────────────────────────────────────────
+var GEO_AGES = ["Hadean","Archean","Proterozoic","Cambrian","Ordovician","Silurian",
+  "Devonian","Carboniferous","Permian","Triassic","Jurassic","Cretaceous",
+  "Paleogene","Neogene","Quaternary","Unknown"];
+
+// Lithology pattern colors — reuses ROCK_COLORS palette
+var STRAT_ROCK_COLORS = {
+  Shale:"#8b8b2a", Limestone:"#00bcd4", Sandstone:"#e8e04a",
+  Clay:"#9c27b0",  Siltstone:"#f4a460", Marl:"#d4a017", Gravel:"#c8c8c8",
+  Coal:"#222222",  Mudstone:"#a0785a",  Granite:"#f4a0a0", Quartzite:"#e0e0ff",
+  Basalt:"#555577",Schist:"#88aa88",    Gneiss:"#bb9977",  Limestone:"#00bcd4",
+};
+var STRAT_ROCK_TYPES = ["Sandstone","Shale","Limestone","Clay","Siltstone",
+  "Marl","Gravel","Coal","Mudstone","Granite","Quartzite","Basalt","Schist","Gneiss"];
+
+function renderStratColumn(formations, meta, exportDPI, pageSize){
+  exportDPI = exportDPI||300;
+  pageSize  = pageSize||"A3";
+  var PW = pageSize==="A2"?1587:1123;
+  var PH = pageSize==="A2"?2245:1587;
+  var {studyArea,lga,state} = meta;
+  var title = "COMPOSITE STRATIGRAPHIC COLUMN OF "+(studyArea||"STUDY AREA").toUpperCase()+" AND ENVIRONS";
+  var subtitle = "IN "+(lga?lga.toUpperCase()+", ":"")+(state||"").toUpperCase()+" STATE";
+  var filename = "StratColumn_"+(studyArea||"map").replace(/\s+/g,"_");
+
+  var RCOLORS = JSON.stringify(STRAT_ROCK_COLORS);
+
+  var html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><title>${title}</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#d0d0d0;font-family:"Times New Roman",serif;display:flex;flex-direction:column;align-items:center;}
+.controls{width:${PW}px;padding:10px 14px;background:#2a2a2a;display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:100;}
+.controls button{background:#2c5f8a;color:#fff;border:none;padding:7px 16px;border-radius:5px;font-weight:bold;cursor:pointer;font-size:12px;font-family:sans-serif;}
+.controls button:hover{background:#1a4a70;}
+.page{width:${PW}px;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,0.3);margin:16px auto;}
+canvas{display:block;}
+@media print{body{background:#fff;}.controls{display:none;}.page{margin:0;box-shadow:none;}@page{size:${pageSize==="A2"?"A2":"A3"} portrait;margin:0;}}
+</style>
+</head><body>
+<div class="controls">
+  <span style="color:#f0c040;font-family:sans-serif;font-weight:bold;font-size:12px;">MAP 5 — STRATIGRAPHIC COLUMN</span>
+  <span style="color:#888;font-family:sans-serif;font-size:11px;margin:0 8px;">|</span>
+  <button onclick="doExport('png')">&#11015; PNG</button>
+  <button onclick="doExport('jpeg')">&#11015; JPEG</button>
+  <button onclick="doExport('pdf')">&#11015; PDF</button>
+  <button onclick="window.print()">Print</button>
+  <span style="color:#555;font-family:sans-serif;font-size:10px;margin-left:auto;">DPI: ${exportDPI}</span>
+</div>
+<div class="page"><canvas id="sc" width="${PW}" height="${PH}"></canvas></div>
+<script>
+var PW=${PW},PH=${PH},pageSize="${pageSize}";
+var formations=${JSON.stringify(formations)};
+var ROCK_COLORS=${RCOLORS};
+var title=${JSON.stringify(title)},subtitle=${JSON.stringify(subtitle)};
+var filename=${JSON.stringify(filename)};
+var exportDPI=${exportDPI},SCREEN_DPI=96;
+var canvas=document.getElementById("sc"),ctx=canvas.getContext("2d");
+
+// ── Layout constants ──────────────────────────────────────────────────────────
+var BO=6,BG=8,BI=2,PAD=20;          // borders
+var CX=BO+BG+BI+PAD;                 // content left
+var CY=BO+BG+BI+PAD+80;             // content top (below title area)
+var CW=PW-CX*2;                      // content width
+var CH=PH-CY-(BO+BG+BI+PAD+60);    // content height
+
+// Column layout (left to right)
+var AGE_W   = Math.round(CW*0.14);  // Age / Period
+var THICK_W = Math.round(CW*0.09);  // Thickness
+var COL_W   = Math.round(CW*0.18);  // Lithology column (the column itself)
+var DESC_W  = CW - AGE_W - THICK_W - COL_W; // Description
+
+var COL_X   = CX + AGE_W + THICK_W;         // x of lithology column
+var DESC_X  = COL_X + COL_W;                // x of description
+
+// ── Total thickness for scale ─────────────────────────────────────────────────
+var totalM = formations.reduce(function(s,f){return s+(parseFloat(f.thickness)||0);},0)||100;
+var pxPerM = CH / totalM;
+
+// ── DRAW ─────────────────────────────────────────────────────────────────────
+function draw(){
+  ctx.fillStyle="#fff";ctx.fillRect(0,0,PW,PH);
+
+  // Page borders
+  ctx.strokeStyle="#000";ctx.lineWidth=BO;
+  ctx.strokeRect(BO/2,BO/2,PW-BO,PH-BO);
+  ctx.lineWidth=BI;
+  var ib=BO+BG;ctx.strokeRect(ib,ib,PW-ib*2,PH-ib*2);
+
+  // Title block
+  ctx.font="bold 13px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
+  ctx.fillText(title,PW/2,BO+BG+BI+PAD+22);
+  ctx.font="11px Times New Roman";
+  ctx.fillText(subtitle,PW/2,BO+BG+BI+PAD+40);
+  ctx.font="9px Times New Roman";ctx.fillStyle="#555";
+  ctx.fillText("MAP 5: COMPOSITE STRATIGRAPHIC COLUMN",PW/2,BO+BG+BI+PAD+58);
+  ctx.textAlign="left";
+
+  // Column headers
+  var HY=CY-8;
+  ctx.font="bold 9px Times New Roman";ctx.fillStyle="#000";ctx.textAlign="center";
+  ctx.fillText("AGE",CX+AGE_W/2,HY);
+  ctx.fillText("THICK.(m)",CX+AGE_W+THICK_W/2,HY);
+  ctx.fillText("LITHOLOGY",COL_X+COL_W/2,HY);
+  ctx.fillText("DESCRIPTION",DESC_X+DESC_W/2,HY);
+  ctx.textAlign="left";
+
+  // Header separator
+  ctx.strokeStyle="#000";ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(CX,CY-2);ctx.lineTo(CX+CW,CY-2);ctx.stroke();
+
+  // Outer column box
+  ctx.strokeStyle="#000";ctx.lineWidth=1.2;ctx.strokeRect(CX,CY,CW,CH);
+
+  // Vertical dividers
+  [[CX+AGE_W],[CX+AGE_W+THICK_W],[COL_X+COL_W]].forEach(function(arr){
+    var x=arr[0];
+    ctx.beginPath();ctx.moveTo(x,CY);ctx.lineTo(x,CY+CH);ctx.stroke();
+  });
+
+  // Draw formations top to bottom (youngest at top, oldest at bottom)
+  // formations array: index 0 = youngest (top)
+  var y=CY;
+  formations.forEach(function(f,fi){
+    var m=parseFloat(f.thickness)||10;
+    var h=Math.max(m*pxPerM,18); // min 18px so text is visible
+    var color=ROCK_COLORS[f.rock]||"#ccc";
+
+    // Lithology fill
+    ctx.fillStyle=color;ctx.globalAlpha=0.9;
+    ctx.fillRect(COL_X+1,y+1,COL_W-2,h-1);
+    ctx.globalAlpha=1;
+
+    // Unconformity: wavy line at top of this band if flagged
+    if(f.unconformity&&fi>0){
+      ctx.strokeStyle="#e74c3c";ctx.lineWidth=2;ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(COL_X,y);ctx.lineTo(COL_X+COL_W,y);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle="#e74c3c";ctx.font="bold 8px Times New Roman";
+      ctx.textAlign="center";ctx.fillText("— UNCONFORMITY —",COL_X+COL_W/2,y-3);
+      ctx.textAlign="left";
+    }
+
+    // Band separator line
+    ctx.strokeStyle="#000";ctx.lineWidth=0.5;
+    ctx.beginPath();ctx.moveTo(CX,y+h);ctx.lineTo(CX+CW,y+h);ctx.stroke();
+
+    // Age label (rotated if tall enough)
+    var midY=y+h/2;
+    ctx.fillStyle="#000";ctx.font="9px Times New Roman";
+    if(h>24){
+      ctx.save();ctx.translate(CX+AGE_W/2,midY);ctx.rotate(-Math.PI/2);
+      ctx.textAlign="center";ctx.fillText(f.age||"Unknown",0,0);ctx.restore();
+    }else{
+      ctx.textAlign="center";ctx.font="7px Times New Roman";
+      ctx.fillText((f.age||"").slice(0,8),CX+AGE_W/2,midY+3);
+    }
+
+    // Thickness
+    ctx.textAlign="center";ctx.font="9px Times New Roman";ctx.fillStyle="#000";
+    ctx.fillText(m+"m",CX+AGE_W+THICK_W/2,midY+3);
+
+    // Formation name inside lithology column (centered, bold)
+    ctx.textAlign="center";ctx.font="bold 8px Times New Roman";ctx.fillStyle="#000";
+    if(h>14){ctx.fillText(f.name||"",COL_X+COL_W/2,midY+3);}
+
+    // Description (left-aligned, wraps)
+    ctx.textAlign="left";ctx.font="9px Times New Roman";ctx.fillStyle="#333";
+    var desc=f.description||"";
+    var maxW=DESC_W-8;
+    var words=desc.split(" "),line="",dy=y+13;
+    words.forEach(function(w){
+      var test=line?line+" "+w:w;
+      if(ctx.measureText(test).width>maxW&&line){
+        if(dy<y+h-2){ctx.fillText(line,DESC_X+4,dy);dy+=11;}
+        line=w;
+      }else{line=test;}
+    });
+    if(line&&dy<y+h-2)ctx.fillText(line,DESC_X+4,dy);
+
+    y+=h;
+  });
+
+  // Depth scale on right edge of lithology column
+  ctx.strokeStyle="#000";ctx.lineWidth=0.7;
+  var tickStep=totalM<=100?10:totalM<=500?50:100;
+  for(var d=0;d<=totalM;d+=tickStep){
+    var ty=CY+d*pxPerM;if(ty>CY+CH)break;
+    ctx.beginPath();ctx.moveTo(COL_X+COL_W,ty);ctx.lineTo(COL_X+COL_W+6,ty);ctx.stroke();
+    ctx.fillStyle="#000";ctx.font="8px Times New Roman";ctx.textAlign="left";
+    ctx.fillText(d+"m",COL_X+COL_W+8,ty+3);
+  }
+
+  // Caption
+  ctx.font="9px Times New Roman";ctx.fillStyle="#555";ctx.textAlign="center";
+  ctx.fillText("Vertical scale: 1 cm = "+Math.round(totalM/(CH/28.35)*10)/10+" m  |  Generated by Geo Mapping System v0.8",
+    PW/2,PH-(BO+BG+BI+PAD)-10);
+  ctx.textAlign="left";
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────────
+function doExport(fmt){
+  var SCALE=exportDPI/SCREEN_DPI;
+  var hc=document.createElement("canvas");
+  hc.width=Math.round(PW*SCALE);hc.height=Math.round(PH*SCALE);
+  var hx=hc.getContext("2d");hx.scale(SCALE,SCALE);hx.drawImage(canvas,0,0,PW,PH);
+  if(fmt==="pdf"){
+    if(!window.jspdf){alert("PDF library loading, try again.");return;}
+    var mm=pageSize==="A2"?{w:420,h:594}:{w:297,h:420};
+    var doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:pageSize==="A2"?"a2":"a3"});
+    doc.addImage(canvas.toDataURL("image/png",1.0),"PNG",0,0,mm.w,mm.h);
+    doc.save(filename+".pdf");
+  }else{
+    var mime=fmt==="jpeg"?"image/jpeg":"image/png";
+    var ext=fmt==="jpeg"?"jpg":"png";
+    hc.toBlob(function(blob){
+      var url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.download=filename+"."+ext;a.href=url;a.click();
+      setTimeout(function(){URL.revokeObjectURL(url);},1000);
+    },mime,fmt==="jpeg"?0.95:undefined);
+  }
+}
+window.doExport=doExport;
+draw();
+<\/script></body></html>`;
+  return html;
+}
+
+// ── STRAT EDITOR COMPONENT ────────────────────────────────────────────────────
+var EMPTY_FORMATION = {name:"",rock:"Shale",thickness:"",age:"Unknown",description:"",unconformity:false};
+
+function StratEditor({formations,onChange,onExport}){
+  function addRow(){
+    onChange(formations.concat([Object.assign({},EMPTY_FORMATION)]));
+  }
+  function updateRow(i,key,val){
+    onChange(formations.map(function(f,idx){
+      return idx===i?Object.assign({},f,{[key]:val}):f;
+    }));
+  }
+  function removeRow(i){
+    onChange(formations.filter(function(_,idx){return idx!==i;}));
+  }
+  function moveRow(i,dir){
+    var next=formations.slice();
+    var j=i+dir;
+    if(j<0||j>=next.length)return;
+    var tmp=next[i];next[i]=next[j];next[j]=tmp;
+    onChange(next);
+  }
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{fontSize:11,color:"#e67e22",fontWeight:"bold",marginBottom:4}}>
+        📊 STRATIGRAPHIC COLUMN
+      </div>
+      <div style={{fontSize:9,color:"#666",lineHeight:1.6,marginBottom:6}}>
+        Add formations youngest → oldest (top → bottom). Each row = one formation band.
+      </div>
+
+      {formations.length===0&&(
+        <div style={{background:"#12122e",border:"1px dashed #3a3a6a",borderRadius:6,padding:12,textAlign:"center",color:"#444",fontSize:10}}>
+          No formations yet. Click Add Formation to begin.
+        </div>
+      )}
+
+      {formations.map(function(f,i){return(
+        <div key={i} style={{background:"#12122e",border:"1px solid #3a2a1a",borderRadius:6,padding:8}}>
+          {/* Row header */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:12,height:12,background:STRAT_ROCK_COLORS[f.rock]||"#ccc",borderRadius:2,border:"1px solid #fff",flexShrink:0}}/>
+              <span style={{fontSize:10,color:"#e67e22",fontWeight:"bold"}}>
+                {i===0?"Youngest":i===formations.length-1?"Oldest":"Formation "+(i+1)}
+              </span>
+            </div>
+            <div style={{display:"flex",gap:3}}>
+              <button onClick={function(){moveRow(i,-1);}} disabled={i===0}
+                style={{background:"#1a1a3a",color:i===0?"#333":"#aaa",border:"1px solid #3a3a6a",borderRadius:3,padding:"2px 6px",fontSize:10,cursor:i===0?"not-allowed":"pointer"}}>↑</button>
+              <button onClick={function(){moveRow(i,1);}} disabled={i===formations.length-1}
+                style={{background:"#1a1a3a",color:i===formations.length-1?"#333":"#aaa",border:"1px solid #3a3a6a",borderRadius:3,padding:"2px 6px",fontSize:10,cursor:i===formations.length-1?"not-allowed":"pointer"}}>↓</button>
+              <button onClick={function(){removeRow(i);}}
+                style={{background:"#3a0a0a",color:"#e74c3c",border:"1px solid #e74c3c",borderRadius:3,padding:"2px 6px",fontSize:10,cursor:"pointer"}}>✕</button>
+            </div>
+          </div>
+
+          {/* Formation name + thickness on one row */}
+          <div style={{display:"flex",gap:4,marginBottom:4}}>
+            <div style={{flex:2}}>
+              <div style={{fontSize:8,color:"#7ab",marginBottom:2}}>Formation Name *</div>
+              <input value={f.name} onChange={function(e){updateRow(i,"name",e.target.value);}}
+                placeholder="e.g. Ajali Sandstone" style={Object.assign({},INP,{marginBottom:0,fontSize:9})}/>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:8,color:"#7ab",marginBottom:2}}>Thickness (m) *</div>
+              <input value={f.thickness} onChange={function(e){updateRow(i,"thickness",e.target.value);}}
+                placeholder="e.g. 45" type="number" min="1"
+                style={Object.assign({},INP,{marginBottom:0,fontSize:9})}/>
+            </div>
+          </div>
+
+          {/* Rock type + Age on one row */}
+          <div style={{display:"flex",gap:4,marginBottom:4}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:8,color:"#7ab",marginBottom:2}}>Rock Type</div>
+              <select value={f.rock} onChange={function(e){updateRow(i,"rock",e.target.value);}}
+                style={Object.assign({},SEL,{marginBottom:0,fontSize:9})}>
+                {STRAT_ROCK_TYPES.map(function(r){return <option key={r}>{r}</option>;})}
+              </select>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:8,color:"#7ab",marginBottom:2}}>Geological Age</div>
+              <select value={f.age||"Unknown"} onChange={function(e){updateRow(i,"age",e.target.value);}}
+                style={Object.assign({},SEL,{marginBottom:0,fontSize:9})}>
+                {GEO_AGES.map(function(a){return <option key={a}>{a}</option>;})}
+              </select>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div style={{marginBottom:4}}>
+            <div style={{fontSize:8,color:"#7ab",marginBottom:2}}>Lithology Description</div>
+            <input value={f.description} onChange={function(e){updateRow(i,"description",e.target.value);}}
+              placeholder="e.g. Coarse-grained, cross-bedded, friable"
+              style={Object.assign({},INP,{marginBottom:0,fontSize:9})}/>
+          </div>
+
+          {/* Unconformity toggle */}
+          <div style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}
+            onClick={function(){updateRow(i,"unconformity",!f.unconformity);}}>
+            <div style={{
+              width:14,height:14,borderRadius:2,border:"1px solid #e74c3c",
+              background:f.unconformity?"#e74c3c":"transparent",
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:9
+            }}>{f.unconformity?"✓":""}</div>
+            <span style={{fontSize:9,color:"#888"}}>Unconformity above this formation</span>
+          </div>
+        </div>
+      );})}
+
+      <button onClick={addRow}
+        style={{background:"#1a3a1a",color:"#27ae60",border:"1px solid #27ae60",
+                borderRadius:6,padding:"7px",fontSize:10,cursor:"pointer",fontWeight:"bold",width:"100%"}}>
+        + Add Formation
+      </button>
+
+      {formations.length>0&&(
+        <button onClick={onExport}
+          style={{background:"#3a2000",color:"#e67e22",border:"1px solid #e67e22",
+                  borderRadius:6,padding:"8px",fontSize:10,cursor:"pointer",fontWeight:"bold",width:"100%"}}>
+          📊 Generate Stratigraphic Column (MAP 5)
+        </button>
+      )}
+
+      {/* Cross-map bonus notice */}
+      {formations.length>0&&(
+        <div style={{background:"#0a1a0a",border:"1px solid #1a3a1a",borderRadius:6,padding:8}}>
+          <div style={{fontSize:9,color:"#27ae60",fontWeight:"bold",marginBottom:3}}>✓ Cross-Map Sync Active</div>
+          <div style={{fontSize:8,color:"#555",lineHeight:1.6}}>
+            Formation names here are available as dropdown options when editing geology polygon attributes.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── CONSTANTS ──────────────────────────────────────────────────────────────────
 const MODES=["pan","town","road-major","road-minor","river","sample","geology","select"];
 const MODE_LABELS={pan:"✋ Pan",town:"🏘 Town","road-major":"🟠 Major Road","road-minor":"⬛ Minor Road",river:"🌊 River",sample:"🔺 Sample",geology:"🪨 Geology",select:"👆 Select"};
@@ -1367,6 +1872,8 @@ export default function GeoMappingSystem(){
   var [projStudyArea,setProjStudyArea]=useState("");
   var [projLGA,setProjLGA]=useState("");
   var [projState,setProjState]=useState("Akwa Ibom");
+  var [mapTypes,setMapTypes]=useState(["sample","geo"]);
+  var [stratFormations,setStratFormations]=useState([]);
   var [showProjInfo,setShowProjInfo]=useState(false);
   var canvasRef=useRef(null),containerRef=useRef(null);
   var [center,setCenter]=useState({lat:NIGERIA_CENTER[0],lon:NIGERIA_CENTER[1]});
@@ -1414,20 +1921,23 @@ export default function GeoMappingSystem(){
     setCurrentProject(project);setShowDashboard(false);
     setProjName(project.name||"");setProjStudyArea(project.study_area||"");
     setProjLGA(project.lga||"");setProjState(project.state||"Akwa Ibom");
+    setMapTypes(project.map_types||["sample","geo"]);
     setCenter({lat:project.center_lat||NIGERIA_CENTER[0],lon:project.center_lon||NIGERIA_CENTER[1]});
     setZoom(project.zoom||NIGERIA_ZOOM);
-    var [t,ro,ri,s,g]=await Promise.all([
+    var [t,ro,ri,s,g,sc]=await Promise.all([
       supabase.from("towns").select("*").eq("project_id",project.id),
       supabase.from("roads").select("*").eq("project_id",project.id),
       supabase.from("rivers").select("*").eq("project_id",project.id),
       supabase.from("samples").select("*").eq("project_id",project.id),
       supabase.from("geology_zones").select("*").eq("project_id",project.id),
+      supabase.from("stratigraphic_columns").select("*").eq("project_id",project.id).single(),
     ]);
     setTowns((t.data||[]).map(function(x){return{lat:x.lat,lon:x.lon,name:x.name,townType:x.town_type,_id:x.id};}));
     setRoads((ro.data||[]).map(function(x){return{type:x.road_type,name:x.name,surface:x.surface,points:x.points||[],_id:x.id};}));
     setRivers((ri.data||[]).map(function(x){return{name:x.name,flow:x.flow,points:x.points||[],_id:x.id};}));
     setSamples((s.data||[]).map(function(x){return{lat:x.lat,lon:x.lon,id:x.sample_id,rock:x.rock,description:x.description,strike:x.strike,dip:x.dip,notes:x.notes,_id:x.id};}));
     setGeoZones((g.data||[]).map(function(x){return{rock:x.rock,formation:x.formation,period:x.period,contact:x.contact,strike:x.strike||"",dip:x.dip||"",points:x.points||[],_id:x.id};}));
+    setStratFormations((sc.data&&sc.data.formations)||[]);
     setSaveStatus("saved");
   }
 
@@ -1437,6 +1947,7 @@ export default function GeoMappingSystem(){
     try{
       await supabase.from("projects").update({
         name:projName||projStudyArea||"Untitled",study_area:projStudyArea,lga:projLGA,state:projState,
+        map_types:mapTypes,
         center_lat:center.lat,center_lon:center.lon,zoom
       }).eq("id",currentProject.id);
       await Promise.all([
@@ -1452,12 +1963,17 @@ export default function GeoMappingSystem(){
       if(rivers.length>0)inserts.push(supabase.from("rivers").insert(rivers.map(function(r){return{project_id:pid,name:r.name||"",flow:r.flow||"Unknown",points:r.points};})));
       if(samples.length>0)inserts.push(supabase.from("samples").insert(samples.map(function(s){return{project_id:pid,sample_id:s.id||"",rock:s.rock||"Shale",description:s.description||"",strike:s.strike||"",dip:s.dip||"",notes:s.notes||"",lat:s.lat,lon:s.lon};})));
       if(geoZones.length>0)inserts.push(supabase.from("geology_zones").insert(geoZones.map(function(z){return{project_id:pid,rock:z.rock||"Shale",formation:z.formation||"",period:z.period||"Unknown",contact:z.contact||"Unknown",strike:z.strike||"",dip:z.dip||"",points:z.points};})));
+      // Stratigraphic column — upsert (one row per project)
+      inserts.push(supabase.from("stratigraphic_columns").upsert(
+        {project_id:pid,formations:stratFormations,updated_at:new Date().toISOString()},
+        {onConflict:"project_id"}
+      ));
       await Promise.all(inserts);
       setSaveStatus("saved");
     }catch(e){console.error("Save error:",e);setSaveStatus("error");}
-  },[currentProject,user,projName,projStudyArea,projLGA,projState,center,zoom,towns,roads,rivers,samples,geoZones]);
+  },[currentProject,user,projName,projStudyArea,projLGA,projState,mapTypes,stratFormations,center,zoom,towns,roads,rivers,samples,geoZones]);
 
-  useEffect(function(){if(currentProject)setSaveStatus("unsaved");},[towns,roads,rivers,samples,geoZones,projStudyArea,projLGA,projState]);
+  useEffect(function(){if(currentProject)setSaveStatus("unsaved");},[towns,roads,rivers,samples,geoZones,stratFormations,projStudyArea,projLGA,projState]);
 
   var saveProjectRef=useRef(saveProject);
   useEffect(function(){saveProjectRef.current=saveProject;},[saveProject]);
@@ -1647,6 +2163,12 @@ export default function GeoMappingSystem(){
     var w=window.open("","_blank");w.document.write(html);w.document.close();
   },[towns,roads,rivers,samples,geoZones,center,zoom,getMeta,exportDPI,exportPageSize]);
 
+  var openStratColumn=useCallback(function(){
+    if(stratFormations.length===0){alert("Add at least one formation before generating the column.");return;}
+    var html=renderStratColumn(stratFormations,getMeta(),exportDPI,exportPageSize);
+    var w=window.open("","_blank");w.document.write(html);w.document.close();
+  },[stratFormations,getMeta,exportDPI,exportPageSize]);
+
   var activeRoad=activeRoadIdx!==null?roads[activeRoadIdx]:null;
   var activeRiver=activeRiverIdx!==null?rivers[activeRiverIdx]:null;
   var activeGeo=activeGeoIdx!==null?geoZones[activeGeoIdx]:null;
@@ -1679,8 +2201,9 @@ export default function GeoMappingSystem(){
         <div style={{display:"flex",gap:5,alignItems:"center"}}>
           <div style={{fontSize:9,color:saveColor,border:"1px solid "+saveColor,borderRadius:10,padding:"2px 8px"}}>{saveLabel}</div>
           <button onClick={saveProject} style={Object.assign({},btnBase,{background:"#1a3a1a",color:"#27ae60",border:"1px solid #27ae60",padding:"4px 10px",fontSize:10})}>💾 Save</button>
-          <button onClick={function(){openMap("sample");}} style={Object.assign({},btnBase,{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"5px 10px",fontSize:10})}>📄 Sample Map</button>
-          <button onClick={function(){openMap("geo");}} style={Object.assign({},btnBase,{background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"5px 10px",fontSize:10})}>🪨 Geologic Map</button>
+          {mapTypes.indexOf("sample")>=0&&<button onClick={function(){openMap("sample");}} style={Object.assign({},btnBase,{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"5px 10px",fontSize:10})}>📄 Sample Map</button>}
+          {mapTypes.indexOf("geo")>=0&&<button onClick={function(){openMap("geo");}} style={Object.assign({},btnBase,{background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"5px 10px",fontSize:10})}>🪨 Geologic Map</button>}
+          {mapTypes.indexOf("strat")>=0&&<button onClick={openStratColumn} style={Object.assign({},btnBase,{background:"#3a2000",color:"#e67e22",border:"1px solid #e67e22",padding:"5px 10px",fontSize:10})}>📊 Strat Column</button>}
           <button onClick={function(){setShowProjInfo(function(v){return !v;});}} style={Object.assign({},btnBase,{background:showProjInfo?"#2a2a0a":"#1a1a3a",color:"#f0c040",border:"1px solid "+(showProjInfo?"#f0c040":"#3a3a6a"),padding:"4px 10px",fontSize:10})}>⚙ Project Info</button>
           <button onClick={function(){setShowDashboard(true);}} style={Object.assign({},btnBase,{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",padding:"4px 10px",fontSize:10})}>← Projects</button>
           <div style={{background:"#1a1a3a",border:"1px solid #3a3a6a",borderRadius:10,padding:"2px 8px",fontSize:9,color:"#888"}}>z{zoom}</div>
@@ -1698,7 +2221,11 @@ export default function GeoMappingSystem(){
       )}
 
       <div style={{background:"#0a0a20",borderBottom:"1px solid #2a2a5a",padding:"6px 10px",display:"flex",gap:4,alignItems:"center",flexShrink:0,overflowX:"auto"}}>
-        {MODES.map(function(m){return(
+        {MODES.filter(function(m){
+          // Hide geology tool if geo map not in this project's map types
+          if(m==="geology"&&mapTypes.indexOf("geo")<0)return false;
+          return true;
+        }).map(function(m){return(
           <button key={m} onClick={function(){setMode(m);if(m==="pan"){setActiveRoadIdx(null);setActiveRiverIdx(null);setActiveGeoIdx(null);}if(m!=="select")setSelectedFeature(null);}}
             style={Object.assign({},btnBase,{background:mode===m?"#f0c040":MODE_COLORS[m]||"#2a2a4a",color:mode===m?"#000":"#ccc",padding:"6px 10px",fontSize:10,whiteSpace:"nowrap",border:"1px solid "+(mode===m?"#f0c040":"#3a3a6a")})}>
             {MODE_LABELS[m]}
@@ -1738,7 +2265,7 @@ export default function GeoMappingSystem(){
                 {mode==="select"&&(selectedFeature?(
                   selectedFeature.type==="town"?<TownEditPanel town={towns[selectedFeature.id]} onSave={saveSelected} onDelete={deleteSelected} onDeselect={function(){setSelectedFeature(null);}}/>
                   :selectedFeature.type==="sample"?<SampleEditPanel sample={samples[selectedFeature.id]} allSamples={samples} editingIdx={selectedFeature.id} onSave={saveSelected} onDelete={deleteSelected} onDeselect={function(){setSelectedFeature(null);}}/>
-                  :selectedFeature.type==="geology"?<GeoEditPanel zone={geoZones[selectedFeature.id]} onSave={saveSelected} onDelete={deleteSelected} onDeselect={function(){setSelectedFeature(null);}}/>
+                  :selectedFeature.type==="geology"?<GeoEditPanel zone={geoZones[selectedFeature.id]} stratFormations={stratFormations} onSave={saveSelected} onDelete={deleteSelected} onDeselect={function(){setSelectedFeature(null);}}/>
                   :selectedFeature.type==="road"?<RoadEditPanel road={roads[selectedFeature.id]} onSave={saveSelected} onDelete={deleteSelected} onDeselect={function(){setSelectedFeature(null);}}/>
                   :selectedFeature.type==="river"?<RiverEditPanel river={rivers[selectedFeature.id]} onSave={saveSelected} onDelete={deleteSelected} onDeselect={function(){setSelectedFeature(null);}}/>
                   :null
@@ -1750,6 +2277,16 @@ export default function GeoMappingSystem(){
                 {mode==="geology"&&(<div style={{background:"#12122e",border:"1px solid #2a1a5a",borderRadius:8,padding:10}}><div style={{fontSize:11,color:"#9b59b6",fontWeight:"bold",marginBottom:8}}>🪨 GEOLOGY ZONE</div><Field label="Rock Type"><select value={geoRock} onChange={function(e){setGeoRock(e.target.value);}} style={SEL}>{ROCK_TYPES.map(function(r){return <option key={r}>{r}</option>;})}</select></Field><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><div style={{width:18,height:18,background:ROCK_COLORS[geoRock],borderRadius:3,border:"1px solid #fff"}}/><span style={{fontSize:10,color:"#888"}}>{geoRock}</span></div><div style={{fontSize:10,color:"#888",lineHeight:1.6,marginBottom:6}}>Click nodes · green circle to close · min 3 points<br/>Use 👆 Select after placing to add formation name &amp; dip</div>{activeGeo&&<div style={{marginTop:6,fontSize:10,color:"#f0c040"}}>{activeGeo.points.length} nodes placed</div>}<CoordInput label="Add Node by Coordinates" onPlace={placeFromCoord}/></div>)}
                 {mode==="pan"&&(<div style={{fontSize:11,color:"#555",textAlign:"center",padding:20,lineHeight:1.8}}>Select a drawing tool above to begin.<br/><br/>Use <span style={{color:"#27ae60"}}>👆 Select</span> to click any placed feature and edit its attributes.</div>)}
                 <button onClick={clearAll} style={Object.assign({},btnBase,{background:"#3a1a1a",color:"#e74c3c",border:"1px solid #e74c3c",padding:"7px",fontSize:10,width:"100%"})}>🗑 Clear All Features</button>
+                {/* ── STRATIGRAPHIC COLUMN EDITOR ── shows when strat map type active */}
+                {mapTypes.indexOf("strat")>=0&&(
+                  <div style={{borderTop:"1px solid #2a2a5a",paddingTop:10,marginTop:4}}>
+                    <StratEditor
+                      formations={stratFormations}
+                      onChange={setStratFormations}
+                      onExport={openStratColumn}
+                    />
+                  </div>
+                )}
               </div>
             )}
             {tab==="data"&&(
@@ -1786,8 +2323,9 @@ export default function GeoMappingSystem(){
                 </div>
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:8}}>GENERATE MAPS</div>
-                  <button onClick={function(){openMap("sample");}} style={Object.assign({},btnBase,{width:"100%",background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"10px",fontSize:11,marginBottom:8})}>📄 Sample Location Map<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>{exportPageSize} · {exportDPI}dpi · opens in new tab</span></button>
-                  <button onClick={function(){openMap("geo");}} style={Object.assign({},btnBase,{width:"100%",background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"10px",fontSize:11})}>🪨 Geologic Map<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>{exportPageSize} · {exportDPI}dpi · with cross-section</span></button>
+                  {mapTypes.indexOf("sample")>=0&&<button onClick={function(){openMap("sample");}} style={Object.assign({},btnBase,{width:"100%",background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"10px",fontSize:11,marginBottom:8})}>📄 Sample Location Map<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>{exportPageSize} · {exportDPI}dpi · opens in new tab</span></button>}
+                  {mapTypes.indexOf("geo")>=0&&<button onClick={function(){openMap("geo");}} style={Object.assign({},btnBase,{width:"100%",background:"#2a1a5a",color:"#9b59b6",border:"1px solid #5a2a8a",padding:"10px",fontSize:11,marginBottom:mapTypes.indexOf("strat")>=0?8:0})}>🪨 Geologic Map<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>{exportPageSize} · {exportDPI}dpi · with cross-section</span></button>}
+                  {mapTypes.indexOf("strat")>=0&&<button onClick={openStratColumn} style={Object.assign({},btnBase,{width:"100%",background:"#3a2000",color:"#e67e22",border:"1px solid #e67e22",padding:"10px",fontSize:11})}>📊 Stratigraphic Column (MAP 5)<br/><span style={{fontSize:9,fontWeight:"normal",color:"#888"}}>{exportPageSize} · {exportDPI}dpi · {stratFormations.length} formation{stratFormations.length!==1?"s":""}</span></button>}
                 </div>
                 <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:8,padding:10}}>
                   <div style={{fontSize:11,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>GIS EXPORT</div>
@@ -1797,8 +2335,8 @@ export default function GeoMappingSystem(){
                   <button onClick={function(){exportCSV(samples,projStudyArea||"Study_Area");}} style={Object.assign({},btnBase,{width:"100%",background:"#1a1a0a",color:"#f0c040",border:"1px solid #f0c040",padding:"7px",fontSize:10})}>⬇ CSV — Sample Data (Excel)</button>
                 </div>
                 <div style={{background:"#0f0f1e",border:"1px dashed #2a2a4a",borderRadius:8,padding:10}}>
-                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 8</div>
-                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>Map type selection at project creation.</div>
+                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 10</div>
+                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>Topographic Map — elevation API, contour lines, hillshade.</div>
                 </div>
               </div>
             )}
@@ -1807,7 +2345,7 @@ export default function GeoMappingSystem(){
       </div>
 
       <div style={{background:"#0a0a1e",borderTop:"1px solid #2a2a5a",padding:"4px 14px",display:"flex",justifyContent:"space-between",flexShrink:0}}>
-        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v0.7 — Seq 7 Fixed</span>
+        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v0.8 — Seq 9 Stratigraphic Column</span>
         <span style={{fontSize:9,color:"#333"}}>Nigeria · WGS84 · OpenStreetMap · {user?.email}</span>
       </div>
     </div>
