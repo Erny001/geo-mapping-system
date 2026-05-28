@@ -3085,7 +3085,8 @@ function CSVImportPanel({onImport,onClose,rockTypes}){
     });
     var {data:{subscription}}=supabase.auth.onAuthStateChange(function(_event,session){
       setUser(session?.user||null);
-      if(!session?.user){setCurrentProject(null);setShowDashboard(false);}else{setShowDashboard(true);}
+      if(!session?.user){setCurrentProject(null);setShowDashboard(false);}
+      // Only redirect to dashboard on explicit sign-out, not on token refresh or tab focus events
     });
     return function(){subscription.unsubscribe();};
   },[]);
