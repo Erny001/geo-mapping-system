@@ -2711,6 +2711,324 @@ async function loadSRTMContours(bbox,setContourLines,setActiveContourIdx,setSrtm
 }
 
 export default function GeoMappingSystem(){
+  // ── FIELD DEFINITIONS ─────────────────────────────────────────────────────────
+var CSV_FIELDS = [
+  {key:"id",       label:"Sample ID",    required:true},
+  {key:"lat",      label:"Latitude",     required:true},
+  {key:"lon",      label:"Longitude",    required:true},
+  {key:"rock",     label:"Rock Type",    required:false},
+  {key:"formation",label:"Formation",    required:false},
+  {key:"strike",   label:"Strike",       required:false},
+  {key:"dip",      label:"Dip",          required:false},
+  {key:"elevation",label:"Elevation",    required:false},
+  {key:"description",label:"Description",required:false},
+  {key:"notes",    label:"Notes",        required:false},
+];
+
+function parseCSVFile(text){
+  var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
+  if(lines.length<2)return null;
+  function parseLine(line){
+    var cols=[],cur="",inQ=false;
+    for(var i=0;i<line.length;i++){
+      var c=line[i];
+      if(c==='"'&&!inQ){inQ=true;}
+      else if(c==='"'&&inQ&&line[i+1]==='"'){cur+='"';i++;}
+      else if(c==='"'&&inQ){inQ=false;}
+      else if(c===','&&!inQ){cols.push(cur.trim());cur="";}
+      else{cur+=c;}
+    }
+    cols.push(cur.trim());
+    return cols;
+  }
+  var headers=parseLine(lines[0]);
+  var rows=lines.slice(1).map(function(l){return parseLine(l);}).filter(function(r){return r.some(function(c){return c;});});
+  return{headers,rows};
+}
+
+function fuzzyMatchColumns(headers){
+  var patterns={
+    id:      [/sample.?id/i,/id/i,/sample.?no/i,/sample.?num/i,/name/i,/label/i],
+    lat:     [/^lat/i,/latitude/i,/^y$/i,/^lat\.?$/i,/northing/i],
+    lon:     [/^lon/i,/longitude/i,/^x$/i,/^long\.?$/i,/easting/i],
+    rock:    [/rock.?type/i,/rock/i,/lithology/i,/lith/i,/type/i],
+    formation:[/formation/i,/form/i,/unit/i,/member/i,/group/i],
+    strike:  [/strike/i,/azimuth/i,/bearing/i],
+    dip:     [/^dip$/i,/dip.?angle/i,/inclination/i],
+    elevation:[/elev/i,/altitude/i,/height/i,/^z$/i,/asl/i,/masl/i],
+    description:[/desc/i,/description/i,/field.?desc/i,/observation/i],
+    notes:   [/note/i,/comment/i,/remark/i,/obs/i],
+  };
+  var mapping={};
+  Object.keys(patterns).forEach(function(field){
+    var pats=patterns[field];
+    for(var pi=0;pi<pats.length;pi++){
+      for(var hi=0;hi<headers.length;hi++){
+        if(pats[pi].test(headers[hi].trim())){
+          if(mapping[field]===undefined)mapping[field]=hi;
+        }
+      }
+    }
+    if(mapping[field]===undefined)mapping[field]=-1;
+  });
+  return mapping;
+}
+
+async function aiDetectColumns(headers, sampleRows){
+  try{
+    var preview=sampleRows.slice(0,3).map(function(r){return r.join(",");}).join("\n");
+    var prompt='I have a CSV file with these column headers:\n'+
+      headers.map(function(h,i){return i+": "+h;}).join(", ")+
+      '\n\nFirst 3 data rows:\n'+preview+
+      '\n\nMap each of these field names to the correct column INDEX (0-based integer, or -1 if not present):\n'+
+      'id (Sample ID), lat (Latitude), lon (Longitude), rock (Rock Type), formation (Formation/Unit), '+
+      'strike (Strike angle 0-360), dip (Dip angle 0-90), elevation (Elevation in metres), '+
+      'description (Field description), notes (Notes/comments)\n\n'+
+      'Respond ONLY with a JSON object like: {"id":0,"lat":1,"lon":2,"rock":3,"formation":-1,"strike":4,"dip":5,"elevation":6,"description":7,"notes":-1}\n'+
+      'No explanation, no markdown, just the JSON object.';
+    var resp=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:300,messages:[{role:"user",content:prompt}]})
+    });
+    if(!resp.ok)throw new Error("API HTTP "+resp.status);
+    var data=await resp.json();
+    var text=(data.content||[]).map(function(b){return b.text||"";}).join("");
+    var clean=text.replace(/```[a-z]*|```/g,"").trim();
+    var parsed=JSON.parse(clean);
+    var valid=true;
+    CSV_FIELDS.forEach(function(f){if(typeof parsed[f.key]!=="number")valid=false;});
+    if(!valid)throw new Error("Invalid mapping shape");
+    return parsed;
+  }catch(e){
+    console.warn("AI column detection failed, using fuzzy match:",e.message);
+    return fuzzyMatchColumns(headers);
+  }
+}
+
+function convexHull(points){
+  if(points.length<3)return points;
+  var pivot=points.reduce(function(best,p){
+    return(p.lat<best.lat||(p.lat===best.lat&&p.lon<best.lon))?p:best;
+  },points[0]);
+  var sorted=points.slice().sort(function(a,b){
+    var da=Math.atan2(a.lat-pivot.lat,a.lon-pivot.lon);
+    var db=Math.atan2(b.lat-pivot.lat,b.lon-pivot.lon);
+    if(da!==db)return da-db;
+    var da2=(a.lon-pivot.lon)*(a.lon-pivot.lon)+(a.lat-pivot.lat)*(a.lat-pivot.lat);
+    var db2=(b.lon-pivot.lon)*(b.lon-pivot.lon)+(b.lat-pivot.lat)*(b.lat-pivot.lat);
+    return da2-db2;
+  });
+  function cross(O,A,B){return(A.lon-O.lon)*(B.lat-O.lat)-(A.lat-O.lat)*(B.lon-O.lon);}
+  var hull=[];
+  for(var i=0;i<sorted.length;i++){
+    while(hull.length>=2&&cross(hull[hull.length-2],hull[hull.length-1],sorted[i])<=0)hull.pop();
+    hull.push(sorted[i]);
+  }
+  return hull;
+}
+
+function downloadTemplateCSV(){
+  var headers="Sample_ID,Latitude,Longitude,Rock_Type,Formation,Strike,Dip,Elevation_m,Description,Notes";
+  var example="UU/GS/GLG/25/001,5.5033,7.7591,Shale,Imo Shale,045,32,45,Dark grey finely laminated shale,Fresh outcrop near stream";
+  var blob=new Blob([headers+"\n"+example],{type:"text/csv"});
+  var url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.download="GeoMap_Template.csv";a.href=url;a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+
+var ROCK_ALIASES={
+  "sh":"Shale","shale":"Shale","sl":"Shale","mudstone":"Mudstone","mud":"Mudstone",
+  "ss":"Sandstone","sandstone":"Sandstone","sand":"Sandstone","arenite":"Sandstone",
+  "ls":"Limestone","limestone":"Limestone","lime":"Limestone","calc":"Limestone",
+  "cl":"Clay","clay":"Clay","claystone":"Clay",
+  "si":"Siltstone","siltstone":"Siltstone","silt":"Siltstone",
+  "ml":"Marl","marl":"Marl",
+  "gr":"Gravel","gravel":"Gravel","conglomerate":"Gravel",
+};
+function normalizeRock(raw){
+  if(!raw||!raw.trim())return"Shale";
+  var key=raw.trim().toLowerCase();
+  if(ROCK_ALIASES[key])return ROCK_ALIASES[key];
+  for(var alias in ROCK_ALIASES){if(key.startsWith(alias))return ROCK_ALIASES[alias];}
+  for(var i=0;i<ROCK_TYPES.length;i++){if(ROCK_TYPES[i].toLowerCase()===key)return ROCK_TYPES[i];}
+  return"Shale";
+}
+
+function ColumnMappingTable({headers,mapping,onChange}){
+  return(
+    <div style={{background:"#0a0a1e",border:"1px solid #2a2a5a",borderRadius:6,overflow:"hidden",marginBottom:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",background:"#12122e",padding:"6px 8px",borderBottom:"1px solid #2a2a5a"}}>
+        <span style={{fontSize:9,color:"#7ab",fontWeight:"bold"}}>FIELD</span>
+        <span style={{fontSize:9,color:"#7ab",fontWeight:"bold"}}>CSV COLUMN</span>
+      </div>
+      {CSV_FIELDS.map(function(f){
+        return(
+          <div key={f.key} style={{display:"grid",gridTemplateColumns:"1fr 1fr",padding:"5px 8px",borderBottom:"1px solid #1a1a3a",alignItems:"center",background:f.required&&mapping[f.key]===-1?"#2a0a0a":"transparent"}}>
+            <span style={{fontSize:9,color:f.required?"#f0c040":"#aaa"}}>{f.label}{f.required?" *":""}</span>
+            <select value={mapping[f.key]===-1?"__none__":String(mapping[f.key])}
+              onChange={function(e){var val=e.target.value==="__none__"?-1:parseInt(e.target.value);var next=Object.assign({},mapping);next[f.key]=val;onChange(next);}}
+              style={{background:"#1e2e3e",color:mapping[f.key]===-1?"#555":"#fff",border:"1px solid #3a5a7a",borderRadius:3,padding:"2px 4px",fontSize:9,width:"100%"}}>
+              <option value="__none__">— not mapped —</option>
+              {headers.map(function(h,i){return <option key={i} value={String(i)}>{h}</option>;})}
+            </select>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CSVImportPanel({onImport,onClose,rockTypes}){
+  var [stage,setStage]=useState("upload");
+  var [csvHeaders,setCsvHeaders]=useState([]);
+  var [csvRows,setCsvRows]=useState([]);
+  var [mapping,setMapping]=useState({});
+  var [msg,setMsg]=useState("");
+  var [err,setErr]=useState("");
+  var [importResult,setImportResult]=useState(null);
+
+  function handleFile(e){
+    var file=e.target.files&&e.target.files[0];
+    if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var parsed=parseCSVFile(ev.target.result);
+      if(!parsed||parsed.rows.length===0){setErr("Could not read CSV. Check the file has data rows.");return;}
+      setCsvHeaders(parsed.headers);setCsvRows(parsed.rows);setErr("");
+      setStage("detecting");setMsg("Detecting columns with AI…");
+      aiDetectColumns(parsed.headers,parsed.rows.slice(0,3)).then(function(m){setMapping(m);setStage("mapping");setMsg("");});
+    };
+    reader.readAsText(file);
+  }
+
+  function handleImport(){
+    if(mapping.id===-1||mapping.lat===-1||mapping.lon===-1){setErr("Sample ID, Latitude, and Longitude columns are required.");return;}
+    setStage("importing");setMsg("Processing "+csvRows.length+" rows…");
+    var imported=[],skipped=0;
+    csvRows.forEach(function(row){
+      var lat=parseFloat(row[mapping.lat]),lon=parseFloat(row[mapping.lon]);
+      if(isNaN(lat)||isNaN(lon)||lat<3||lat>14||lon<3||lon>15){skipped++;return;}
+      imported.push({
+        id:(mapping.id>=0&&row[mapping.id])?row[mapping.id].trim():"S"+(imported.length+1),
+        lat:lat,lon:lon,
+        rock:normalizeRock(mapping.rock>=0?row[mapping.rock]:""),
+        formation:(mapping.formation>=0&&row[mapping.formation])?row[mapping.formation].trim():"",
+        strike:(mapping.strike>=0&&row[mapping.strike])?row[mapping.strike].trim():"",
+        dip:(mapping.dip>=0&&row[mapping.dip])?row[mapping.dip].trim():"",
+        elevation:(mapping.elevation>=0&&row[mapping.elevation])?row[mapping.elevation].trim():"",
+        description:(mapping.description>=0&&row[mapping.description])?row[mapping.description].trim():"",
+        notes:(mapping.notes>=0&&row[mapping.notes])?row[mapping.notes].trim():"",
+      });
+    });
+    if(imported.length===0){setErr("No valid samples found. Check coordinates are within Nigeria (lat 3–14, lon 3–15).");setStage("mapping");return;}
+    var geoZones=[];
+    if(mapping.formation>=0){
+      var byFormation={};
+      imported.forEach(function(s){if(!s.formation)return;if(!byFormation[s.formation])byFormation[s.formation]=[];byFormation[s.formation].push({lat:s.lat,lon:s.lon,rock:s.rock});});
+      Object.keys(byFormation).forEach(function(form){
+        var pts=byFormation[form];if(pts.length<3)return;
+        var hull=convexHull(pts);if(hull.length<3)return;
+        var cLat=hull.reduce(function(s,p){return s+p.lat;},0)/hull.length;
+        var cLon=hull.reduce(function(s,p){return s+p.lon;},0)/hull.length;
+        var expanded=hull.map(function(p){return{lat:cLat+(p.lat-cLat)*1.03,lon:cLon+(p.lon-cLon)*1.03};});
+        geoZones.push({rock:pts[0].rock,formation:form,period:"Unknown",contact:"Unknown",strike:"",dip:"",points:expanded});
+      });
+    }
+    setImportResult({samples:imported,geoZones,skipped});
+    onImport(imported,geoZones);
+    setStage("done");setMsg("");
+  }
+
+  var canImport=mapping.id!==-1&&mapping.lat!==-1&&mapping.lon!==-1;
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:12,padding:20,width:480,maxHeight:"85vh",overflowY:"auto",fontFamily:"sans-serif"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:"bold",color:"#f0c040"}}>📥 CSV Import</div>
+            <div style={{fontSize:10,color:"#555",marginTop:2}}>
+              {stage==="upload"&&"Upload your GPS field data CSV"}
+              {stage==="detecting"&&"AI is detecting your column layout…"}
+              {stage==="mapping"&&"Confirm the column mapping below"}
+              {stage==="importing"&&"Importing samples…"}
+              {stage==="done"&&"Import complete!"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#555",fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+        {(stage==="upload"||stage==="detecting"||stage==="mapping")&&(
+          <div style={{background:"#0a0a1e",border:"1px solid #1a3a5a",borderRadius:6,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><div style={{fontSize:10,color:"#4a9adf",fontWeight:"bold"}}>Need a template?</div><div style={{fontSize:9,color:"#555",marginTop:2}}>Download the standard CSV format with example data</div></div>
+            <button onClick={downloadTemplateCSV} style={{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",borderRadius:5,padding:"5px 10px",fontSize:9,cursor:"pointer",fontWeight:"bold",whiteSpace:"nowrap"}}>⬇ Template CSV</button>
+          </div>
+        )}
+        {stage==="upload"&&(
+          <div>
+            <label style={{display:"block",background:"#0a1a2a",border:"2px dashed #2a5a8a",borderRadius:8,padding:24,textAlign:"center",cursor:"pointer"}}>
+              <div style={{fontSize:24,marginBottom:8}}>📂</div>
+              <div style={{fontSize:12,color:"#4a9adf",fontWeight:"bold",marginBottom:4}}>Click to select CSV file</div>
+              <div style={{fontSize:10,color:"#555"}}>Or drag and drop your GPS export</div>
+              <input type="file" accept=".csv,.txt" onChange={handleFile} style={{display:"none"}}/>
+            </label>
+            <div style={{fontSize:9,color:"#444",marginTop:8,lineHeight:1.6}}>Supported: Garmin BaseCamp, GPS Utility, Excel CSV, any spreadsheet saved as CSV. Coordinates must be decimal degrees (WGS84).</div>
+          </div>
+        )}
+        {stage==="detecting"&&(
+          <div style={{textAlign:"center",padding:24}}>
+            <div style={{fontSize:24,marginBottom:8}}>🤖</div>
+            <div style={{fontSize:12,color:"#f0c040",fontWeight:"bold",marginBottom:4}}>AI Column Detection</div>
+            <div style={{fontSize:10,color:"#555"}}>Analysing {csvHeaders.length} columns across {csvRows.length} rows…</div>
+            <div style={{marginTop:12,height:4,background:"#1a1a3a",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:"60%",background:"#f0c040",borderRadius:2}}/></div>
+          </div>
+        )}
+        {stage==="mapping"&&(
+          <div>
+            <div style={{fontSize:10,color:"#27ae60",marginBottom:8}}>✓ Detected {csvHeaders.length} columns in {csvRows.length} rows. Review mapping below:</div>
+            <ColumnMappingTable headers={csvHeaders} mapping={mapping} onChange={setMapping}/>
+            <div style={{background:"#0a0a1e",border:"1px solid #2a2a5a",borderRadius:6,padding:8,marginBottom:10,overflowX:"auto"}}>
+              <div style={{fontSize:9,color:"#7ab",marginBottom:4,fontWeight:"bold"}}>DATA PREVIEW (first 2 rows)</div>
+              <table style={{borderCollapse:"collapse",width:"100%",fontSize:8}}>
+                <thead><tr>{csvHeaders.map(function(h,i){return<th key={i} style={{color:"#aaa",padding:"2px 4px",textAlign:"left",borderBottom:"1px solid #2a2a5a",whiteSpace:"nowrap"}}>{h}</th>;})}</tr></thead>
+                <tbody>{csvRows.slice(0,2).map(function(row,ri){return(<tr key={ri}>{row.map(function(cell,ci){return<td key={ci} style={{color:"#eee",padding:"2px 4px",whiteSpace:"nowrap",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>{cell}</td>;})}</tr>);})}</tbody>
+              </table>
+            </div>
+            {err&&<div style={{background:"#3a0a0a",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 8px",marginBottom:8,fontSize:9,color:"#ffaaaa"}}>{err}</div>}
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={handleImport} disabled={!canImport} style={{flex:1,background:canImport?"#1a4a2a":"#1a1a2a",color:canImport?"#27ae60":"#444",border:"1px solid "+(canImport?"#27ae60":"#333"),borderRadius:6,padding:"10px",fontSize:11,fontWeight:"bold",cursor:canImport?"pointer":"not-allowed"}}>✓ Import {csvRows.length} Rows</button>
+              <button onClick={function(){setStage("upload");setCsvHeaders([]);setCsvRows([]);setErr("");}} style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"10px 14px",fontSize:11,cursor:"pointer"}}>← Back</button>
+            </div>
+            {!canImport&&<div style={{fontSize:9,color:"#e74c3c",marginTop:6}}>Map Sample ID, Latitude, and Longitude columns to continue.</div>}
+          </div>
+        )}
+        {stage==="importing"&&(
+          <div style={{textAlign:"center",padding:24}}><div style={{fontSize:24,marginBottom:8}}>⚙</div><div style={{fontSize:11,color:"#f0c040"}}>{msg}</div></div>
+        )}
+        {stage==="done"&&importResult&&(
+          <div>
+            <div style={{background:"#0a2a0a",border:"1px solid #27ae60",borderRadius:8,padding:14,marginBottom:12}}>
+              <div style={{fontSize:13,color:"#27ae60",fontWeight:"bold",marginBottom:8}}>✓ Import Complete</div>
+              <div style={{fontSize:11,color:"#eee",marginBottom:4}}>📍 {importResult.samples.length} sample points placed on map</div>
+              {importResult.geoZones.length>0&&<div style={{fontSize:11,color:"#eee",marginBottom:4}}>🪨 {importResult.geoZones.length} draft geology zone{importResult.geoZones.length!==1?"s":""} generated</div>}
+              {importResult.skipped>0&&<div style={{fontSize:11,color:"#f0c040",marginBottom:4}}>⚠ {importResult.skipped} row{importResult.skipped!==1?"s":""} skipped (invalid coordinates)</div>}
+            </div>
+            <div style={{background:"#0a1a2a",border:"1px solid #1a3a5a",borderRadius:6,padding:10,marginBottom:12}}>
+              <div style={{fontSize:10,color:"#4a9adf",fontWeight:"bold",marginBottom:4}}>What to do next</div>
+              <div style={{fontSize:9,color:"#888",lineHeight:1.7}}>
+                1. Use 👆 Select mode to review and edit sample attributes<br/>
+                {importResult.geoZones.length>0?"2. Drag geology polygon nodes to match actual field boundaries":"2. Switch to 🪨 Geology mode to draw formation boundaries"}<br/>
+                3. Add roads and rivers manually, then generate maps
+              </div>
+            </div>
+            <button onClick={onClose} style={{width:"100%",background:"#27ae60",color:"#fff",border:"none",borderRadius:6,padding:"10px",fontSize:12,fontWeight:"bold",cursor:"pointer"}}>✓ Done — Back to Map</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
   var [user,setUser]=useState(null);
   var [authLoading,setAuthLoading]=useState(true);
   var [currentProject,setCurrentProject]=useState(null);
@@ -2755,6 +3073,7 @@ export default function GeoMappingSystem(){
   var [sampleForm,setSampleForm]=useState({id:"",rock:"Shale",description:"",strike:"",dip:"",notes:"",elevation:""});
   var [sampleFormErrs,setSampleFormErrs]=useState({});
   var [geoRock,setGeoRock]=useState("Shale");
+  var [showCSVImport,setShowCSVImport]=useState(false);
   var dragRef=useRef(null);
   var autoSaveRef=useRef(null);
   var W=size.w,H=size.h;
@@ -3089,6 +3408,21 @@ function handleClick(e){
 
   function finishContour(){setActiveContourIdx(null);}
   
+  function handleCSVImport(importedSamples,importedGeoZones){
+    setSamples(function(prev){return prev.concat(importedSamples);});
+    if(importedGeoZones&&importedGeoZones.length>0){setGeoZones(function(prev){return prev.concat(importedGeoZones);});}
+    if(importedSamples.length>0){
+      var lats=importedSamples.map(function(s){return s.lat;});
+      var lons=importedSamples.map(function(s){return s.lon;});
+      var minLat=Math.min.apply(null,lats),maxLat=Math.max.apply(null,lats);
+      var minLon=Math.min.apply(null,lons),maxLon=Math.max.apply(null,lons);
+      setCenter({lat:(minLat+maxLat)/2,lon:(minLon+maxLon)/2});
+      var span=Math.max(maxLat-minLat,maxLon-minLon,0.01);
+      setZoom(span>2?7:span>1?8:span>0.5?9:span>0.1?11:13);
+    }
+    setTab("draw");setMode("select");
+  }
+
   function clearAll(){setTowns([]);setRoads([]);setRivers([]);setSamples([]);setGeoZones([]);setContourLines([]);setActiveRoadIdx(null);setActiveRiverIdx(null);setActiveGeoIdx(null);setActiveContourIdx(null);setPreviewPin(null);setSelectedFeature(null);}
 
   function placeFromCoord(ll){
@@ -3290,6 +3624,7 @@ function handleClick(e){
                     </div>
                   </div>
                 )}
+                <button onClick={function(){setShowCSVImport(true);}} style={Object.assign({},btnBase,{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"8px",fontSize:10,width:"100%",marginBottom:4})}>📥 Import CSV Field Data</button>
                 <button onClick={clearAll} style={Object.assign({},btnBase,{background:"#3a1a1a",color:"#e74c3c",border:"1px solid #e74c3c",padding:"7px",fontSize:10,width:"100%"})}>🗑 Clear All Features</button>
                 {/* ── STRATIGRAPHIC COLUMN EDITOR ── shows when strat map type active */}
                 {mapTypes.indexOf("strat")>=0&&(
@@ -3371,8 +3706,8 @@ function handleClick(e){
                   <button onClick={function(){exportCSV(samples,projStudyArea||"Study_Area");}} style={Object.assign({},btnBase,{width:"100%",background:"#1a1a0a",color:"#f0c040",border:"1px solid #f0c040",padding:"7px",fontSize:10})}>⬇ CSV — Sample Data (Excel)</button>
                 </div>
                 <div style={{background:"#0f0f1e",border:"1px dashed #2a2a4a",borderRadius:8,padding:10}}>
-                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 11</div>
-                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>CSV Import — upload field data, auto-place samples, draft geology polygons.</div>
+                  <div style={{fontSize:10,color:"#444",fontWeight:"bold",marginBottom:4}}>NEXT: SEQUENCE 12</div>
+                  <div style={{fontSize:10,color:"#333",lineHeight:1.6}}>AI Field Notes — photo upload, voice input, sketch-to-map.</div>
                 </div>
               </div>
             )}
@@ -3380,8 +3715,9 @@ function handleClick(e){
         </div>
       </div>
 
+      {showCSVImport&&(<CSVImportPanel onImport={handleCSVImport} onClose={function(){setShowCSVImport(false);}} rockTypes={ROCK_TYPES}/>)}
       <div style={{background:"#0a0a1e",borderTop:"1px solid #2a2a5a",padding:"4px 14px",display:"flex",justifyContent:"space-between",flexShrink:0}}>
-        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v0.9 — Seq 10 Topographic Map</span>
+        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v1.0 — Seq 11 CSV Import</span>
         <span style={{fontSize:9,color:"#333"}}>Nigeria · WGS84 · OpenStreetMap · {user?.email}</span>
       </div>
     </div>
