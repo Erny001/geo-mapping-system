@@ -2722,7 +2722,10 @@ var CSV_FIELDS = [
   {key:"dip",      label:"Dip",          required:false},
   {key:"elevation",label:"Elevation",    required:false},
   {key:"description",label:"Description",required:false},
-  {key:"notes",    label:"Notes",        required:false},
+  {key:"notes",       label:"Notes",          required:false},
+  {key:"town_name",   label:"Nearest Town",   required:false},
+  {key:"town_lat",    label:"Town Latitude",  required:false},
+  {key:"town_lon",    label:"Town Longitude", required:false},
 ];
 
 function parseCSVFile(text){
@@ -2772,6 +2775,48 @@ function fuzzyMatchColumns(headers){
     if(mapping[field]===undefined)mapping[field]=-1;
   });
   return mapping;
+}
+
+async function fetchOSMFeatures(bbox,setTowns,setRoads,setRivers){
+  var {minLat,maxLat,minLon,maxLon}=bbox;
+  var query=`[out:json][timeout:25];
+(
+  way["highway"~"^(primary|secondary|tertiary|unclassified|residential|track|path)$"](${minLat},${minLon},${maxLat},${maxLon});
+  way["waterway"~"^(river|stream|canal)$"](${minLat},${minLon},${maxLat},${maxLon});
+  node["place"~"^(city|town|village|hamlet|suburb)$"](${minLat},${minLon},${maxLat},${maxLon});
+);
+out body;>;out skel qt;`;
+  try{
+    var resp=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:"data="+encodeURIComponent(query)});
+    if(!resp.ok)throw new Error("Overpass HTTP "+resp.status);
+    var data=await resp.json();
+    var nodes={};
+    (data.elements||[]).forEach(function(el){if(el.type==="node")nodes[el.id]=el;});
+    var newTowns=[],newRoads=[],newRivers=[];
+    (data.elements||[]).forEach(function(el){
+      if(el.type==="node"&&el.tags&&el.tags.place){
+        newTowns.push({lat:el.lat,lon:el.lon,name:el.tags.name||el.tags.place||"Settlement",townType:"Settlement"});
+      }
+      if(el.type==="way"&&el.tags){
+        var pts=(el.nodes||[]).map(function(nid){var n=nodes[nid];return n?{lat:n.lat,lon:n.lon}:null;}).filter(Boolean);
+        if(pts.length<2)return;
+        if(el.tags.highway){
+          var isMajor=["primary","secondary","trunk","motorway"].indexOf(el.tags.highway)>=0;
+          newRoads.push({type:isMajor?"major":"minor",name:el.tags.name||"",surface:el.tags.surface||"Paved",points:pts});
+        }
+        if(el.tags.waterway){
+          newRivers.push({name:el.tags.name||"",flow:"Unknown",points:pts});
+        }
+      }
+    });
+    if(newTowns.length>0)setTowns(function(prev){return prev.concat(newTowns);});
+    if(newRoads.length>0)setRoads(function(prev){return prev.concat(newRoads);});
+    if(newRivers.length>0)setRivers(function(prev){return prev.concat(newRivers);});
+    return{towns:newTowns.length,roads:newRoads.length,rivers:newRivers.length};
+  }catch(e){
+    console.warn("OSM Overpass fetch failed:",e.message);
+    return{towns:0,roads:0,rivers:0};
+  }
 }
 
 async function aiDetectColumns(headers, sampleRows){
@@ -2829,8 +2874,8 @@ function convexHull(points){
 }
 
 function downloadTemplateCSV(){
-  var headers="Sample_ID,Latitude,Longitude,Rock_Type,Formation,Strike,Dip,Elevation_m,Description,Notes";
-  var example="UU/GS/GLG/25/001,5.5033,7.7591,Shale,Imo Shale,045,32,45,Dark grey finely laminated shale,Fresh outcrop near stream";
+  var headers="Sample_ID,Latitude,Longitude,Rock_Type,Formation,Strike,Dip,Elevation_m,Description,Notes,Nearest_Town,Town_Latitude,Town_Longitude";
+  var example="UU/GS/GLG/25/001,5.5033,7.7591,Shale,Imo Shale,045,32,45,Dark grey finely laminated shale,Fresh outcrop near stream,Ogu,5.4980,7.7510";
   var blob=new Blob([headers+"\n"+example],{type:"text/csv"});
   var url=URL.createObjectURL(blob),a=document.createElement("a");
   a.download="GeoMap_Template.csv";a.href=url;a.click();
@@ -2905,7 +2950,7 @@ function CSVImportPanel({onImport,onClose,rockTypes}){
   function handleImport(){
     if(mapping.id===-1||mapping.lat===-1||mapping.lon===-1){setErr("Sample ID, Latitude, and Longitude columns are required.");return;}
     setStage("importing");setMsg("Processing "+csvRows.length+" rows…");
-    var imported=[],skipped=0;
+    var imported=[],skipped=0,csvTowns=[];
     csvRows.forEach(function(row){
       var lat=parseFloat(row[mapping.lat]),lon=parseFloat(row[mapping.lon]);
       if(isNaN(lat)||isNaN(lon)||lat<3||lat>14||lon<3||lon>15){skipped++;return;}
@@ -2920,6 +2965,17 @@ function CSVImportPanel({onImport,onClose,rockTypes}){
         description:(mapping.description>=0&&row[mapping.description])?row[mapping.description].trim():"",
         notes:(mapping.notes>=0&&row[mapping.notes])?row[mapping.notes].trim():"",
       });
+      // Auto-place town from CSV if coordinates provided
+      if(mapping.town_name>=0&&mapping.town_lat>=0&&mapping.town_lon>=0){
+        var tName=row[mapping.town_name]&&row[mapping.town_name].trim();
+        var tLat=parseFloat(row[mapping.town_lat]);
+        var tLon=parseFloat(row[mapping.town_lon]);
+        if(tName&&!isNaN(tLat)&&!isNaN(tLon)){
+          if(!csvTowns.find(function(t){return t.name===tName;})){
+            csvTowns.push({lat:tLat,lon:tLon,name:tName,townType:"Settlement"});
+          }
+        }
+      }
     });
     if(imported.length===0){setErr("No valid samples found. Check coordinates are within Nigeria (lat 3–14, lon 3–15).");setStage("mapping");return;}
     var geoZones=[];
@@ -3140,11 +3196,9 @@ function CSVImportPanel({onImport,onClose,rockTypes}){
       if(rivers.length>0)inserts.push(supabase.from("rivers").insert(rivers.map(function(r){return{project_id:pid,name:r.name||"",flow:r.flow||"Unknown",points:r.points};})));
       if(samples.length>0)inserts.push(supabase.from("samples").insert(samples.map(function(s){return{project_id:pid,sample_id:s.id||"",rock:s.rock||"Shale",description:s.description||"",strike:s.strike||"",dip:s.dip||"",notes:s.notes||"",elevation:s.elevation||null,lat:s.lat,lon:s.lon};})));
       if(geoZones.length>0)inserts.push(supabase.from("geology_zones").insert(geoZones.map(function(z){return{project_id:pid,rock:z.rock||"Shale",formation:z.formation||"",period:z.period||"Unknown",contact:z.contact||"Unknown",strike:z.strike||"",dip:z.dip||"",points:z.points};})));
-      // Stratigraphic column — upsert (one row per project)
-      inserts.push(supabase.from("stratigraphic_columns").upsert(
-        {project_id:pid,formations:stratFormations,updated_at:new Date().toISOString()},
-        {onConflict:"project_id"}
-      ));
+      // Stratigraphic column — delete then insert (same pattern as all other tables)
+      await supabase.from("stratigraphic_columns").delete().eq("project_id",pid);
+      if(stratFormations.length>0)inserts.push(supabase.from("stratigraphic_columns").insert({project_id:pid,formations:stratFormations,updated_at:new Date().toISOString()}));
       // Contour lines — delete all then re-insert
       await supabase.from("contour_lines").delete().eq("project_id",pid);
       if(contourLines.length>0)inserts.push(supabase.from("contour_lines").insert(contourLines.map(function(c){return{project_id:pid,elevation:c.elevation,points:c.points,source:c.source||"field"};})));
@@ -3409,9 +3463,10 @@ function handleClick(e){
 
   function finishContour(){setActiveContourIdx(null);}
   
-  function handleCSVImport(importedSamples,importedGeoZones){
+  function handleCSVImport(importedSamples,importedGeoZones,importedTowns){
     setSamples(function(prev){return prev.concat(importedSamples);});
     if(importedGeoZones&&importedGeoZones.length>0){setGeoZones(function(prev){return prev.concat(importedGeoZones);});}
+    if(importedTowns&&importedTowns.length>0){setTowns(function(prev){return prev.concat(importedTowns);});}
     if(importedSamples.length>0){
       var lats=importedSamples.map(function(s){return s.lat;});
       var lons=importedSamples.map(function(s){return s.lon;});
@@ -3420,6 +3475,12 @@ function handleClick(e){
       setCenter({lat:(minLat+maxLat)/2,lon:(minLon+maxLon)/2});
       var span=Math.max(maxLat-minLat,maxLon-minLon,0.01);
       setZoom(span>2?7:span>1?8:span>0.5?9:span>0.1?11:13);
+      // Auto-fetch OSM roads, rivers, towns for the study area
+      var pad=Math.max(span*0.15,0.01);
+      fetchOSMFeatures(
+        {minLat:minLat-pad,maxLat:maxLat+pad,minLon:minLon-pad,maxLon:maxLon+pad},
+        setTowns,setRoads,setRivers
+      );
     }
     setTab("draw");setMode("select");
   }
