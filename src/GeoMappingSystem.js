@@ -3011,6 +3011,267 @@ S03 | 5.3301N 7.4201E | limestone | F:- | STR:- DIP:- | cream crystalline near r
   w.document.close();
 }
 
+function parseGPXFile(xmlText){
+  var parser=new DOMParser();
+  var doc=parser.parseFromString(xmlText,"application/xml");
+  var err=doc.querySelector("parsererror");
+  if(err)return{ok:false,error:"Invalid GPX file: "+err.textContent.slice(0,100)};
+  function getAttr(el,name){return el?el.getAttribute(name):null;}
+  function getText(el,tag){var c=el?el.querySelector(tag):null;return c?c.textContent.trim():"";}
+  function classifyTrack(name){
+    var n=(name||"").toLowerCase();
+    if(/river|stream|creek|brook|waterway|tributary|canal/.test(n))return"river";
+    return"road";
+  }
+  // Parse waypoints → samples
+  var waypoints=[];
+  Array.from(doc.querySelectorAll("wpt")).forEach(function(wpt,i){
+    var lat=parseFloat(getAttr(wpt,"lat")),lon=parseFloat(getAttr(wpt,"lon"));
+    if(isNaN(lat)||isNaN(lon))return;
+    var ele=parseFloat(getText(wpt,"ele"));
+    waypoints.push({
+      id:getText(wpt,"name")||("WPT-"+(i+1)),
+      lat:lat,lon:lon,
+      elevation:isNaN(ele)?"":String(Math.round(ele)),
+      description:getText(wpt,"desc")||getText(wpt,"cmt")||"",
+      rock:"Shale",formation:"",strike:"",dip:"",notes:""
+    });
+  });
+  // Parse tracks → roads or rivers (auto-classified)
+  var tracks=[];
+  Array.from(doc.querySelectorAll("trk")).forEach(function(trk,i){
+    var name=getText(trk,"name")||("Track "+(i+1));
+    var points=[];
+    Array.from(trk.querySelectorAll("trkpt")).forEach(function(pt){
+      var lat=parseFloat(getAttr(pt,"lat")),lon=parseFloat(getAttr(pt,"lon"));
+      if(!isNaN(lat)&&!isNaN(lon))points.push({lat:lat,lon:lon});
+    });
+    if(points.length>=2)tracks.push({name:name,points:points,type:classifyTrack(name),source:"trk"});
+  });
+  // Parse routes → roads
+  Array.from(doc.querySelectorAll("rte")).forEach(function(rte,i){
+    var name=getText(rte,"name")||("Route "+(i+1));
+    var points=[];
+    Array.from(rte.querySelectorAll("rtept")).forEach(function(pt){
+      var lat=parseFloat(getAttr(pt,"lat")),lon=parseFloat(getAttr(pt,"lon"));
+      if(!isNaN(lat)&&!isNaN(lon))points.push({lat:lat,lon:lon});
+    });
+    if(points.length>=2)tracks.push({name:name,points:points,type:"road",source:"rte"});
+  });
+  return{ok:true,waypoints:waypoints,tracks:tracks};
+}
+
+function downloadSampleGPX(){
+  var gpx=`<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GeoMappingSystem" xmlns="http://www.topografix.com/GPX/1/1">
+  <wpt lat="5.3241" lon="7.4112">
+    <ele>45</ele>
+    <name>S01</name>
+    <desc>Shale, dark grey finely laminated</desc>
+  </wpt>
+  <wpt lat="5.3198" lon="7.4089">
+    <ele>42</ele>
+    <name>S02</name>
+    <desc>Sandstone, coarse grained yellowish</desc>
+  </wpt>
+  <wpt lat="5.3301" lon="7.4201">
+    <ele>38</ele>
+    <name>S03</name>
+    <desc>Limestone, cream crystalline</desc>
+  </wpt>
+  <trk>
+    <name>Ogu-Itumbuoso Road</name>
+    <trkseg>
+      <trkpt lat="5.3150" lon="7.4050"><ele>40</ele></trkpt>
+      <trkpt lat="5.3200" lon="7.4100"><ele>41</ele></trkpt>
+      <trkpt lat="5.3250" lon="7.4150"><ele>43</ele></trkpt>
+      <trkpt lat="5.3300" lon="7.4200"><ele>44</ele></trkpt>
+    </trkseg>
+  </trk>
+  <trk>
+    <name>Imo River tributary</name>
+    <trkseg>
+      <trkpt lat="5.3180" lon="7.4060"><ele>35</ele></trkpt>
+      <trkpt lat="5.3220" lon="7.4080"><ele>33</ele></trkpt>
+      <trkpt lat="5.3260" lon="7.4110"><ele>31</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>`;
+  var blob=new Blob([gpx],{type:"application/gpx+xml"});
+  var url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.download="GeoMap_Sample.gpx";a.href=url;a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+}
+
+function GPXImportModal({onImport,onClose}){
+  var [stage,setStage]=useState("upload");
+  var [waypoints,setWaypoints]=useState([]);
+  var [tracks,setTracks]=useState([]);
+  var [err,setErr]=useState("");
+
+  function handleFile(e){
+    var file=e.target.files&&e.target.files[0];
+    if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var result=parseGPXFile(ev.target.result);
+      if(!result.ok){setErr(result.error);return;}
+      if(result.waypoints.length===0&&result.tracks.length===0){
+        setErr("No waypoints or tracks found in this GPX file.");return;
+      }
+      setWaypoints(result.waypoints);
+      setTracks(result.tracks);
+      setErr("");
+      setStage("review");
+    };
+    reader.readAsText(file);
+  }
+
+  function toggleTrackType(i){
+    setTracks(function(prev){return prev.map(function(t,idx){
+      if(idx!==i)return t;
+      return Object.assign({},t,{type:t.type==="road"?"river":"road"});
+    });});
+  }
+
+  function handleConfirm(){
+    var importedSamples=waypoints.map(function(w){
+      return{lat:w.lat,lon:w.lon,id:w.id,rock:w.rock,formation:w.formation,
+             strike:w.strike,dip:w.dip,elevation:w.elevation,
+             description:w.description,notes:w.notes};
+    });
+    var importedRoads=tracks.filter(function(t){return t.type==="road";}).map(function(t){
+      return{type:"minor",name:t.name,surface:"Unpaved",points:t.points};
+    });
+    var importedRivers=tracks.filter(function(t){return t.type==="river";}).map(function(t){
+      return{name:t.name,flow:"Unknown",points:t.points};
+    });
+    onImport(importedSamples,importedRoads,importedRivers);
+  }
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.88)",zIndex:1002,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:12,padding:20,width:520,maxHeight:"85vh",overflowY:"auto",fontFamily:"sans-serif"}}>
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:"bold",color:"#f0c040"}}>📡 Import GPX</div>
+            <div style={{fontSize:10,color:"#555",marginTop:2}}>
+              {stage==="upload"&&"Upload GPS track from Garmin, phone, or any GPS app"}
+              {stage==="review"&&"Review detected features — toggle road/river for each track"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#555",fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+
+        {/* Sample GPX download */}
+        {stage==="upload"&&(
+          <div style={{background:"#0a0a1e",border:"1px solid #1a3a5a",borderRadius:6,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,color:"#4a9adf",fontWeight:"bold"}}>Need a sample GPX file?</div>
+              <div style={{fontSize:9,color:"#555",marginTop:2}}>Download an example with waypoints and tracks to test the import</div>
+            </div>
+            <button onClick={downloadSampleGPX}
+              style={{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",borderRadius:5,padding:"5px 10px",fontSize:9,cursor:"pointer",fontWeight:"bold",whiteSpace:"nowrap"}}>
+              ⬇ Sample GPX
+            </button>
+          </div>
+        )}
+
+        {stage==="upload"&&(
+          <div>
+            <label style={{display:"block",background:"#0a1a2a",border:"2px dashed #2a5a8a",borderRadius:8,padding:24,textAlign:"center",cursor:"pointer"}}>
+              <div style={{fontSize:28,marginBottom:8}}>📡</div>
+              <div style={{fontSize:12,color:"#4a9adf",fontWeight:"bold",marginBottom:4}}>Click to select GPX file</div>
+              <div style={{fontSize:10,color:"#555"}}>Garmin BaseCamp, Google Maps, OsmAnd, Gaia GPS, any GPS device</div>
+              <input type="file" accept=".gpx,.xml" onChange={handleFile} style={{display:"none"}}/>
+            </label>
+            {err&&<div style={{background:"#3a0a0a",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 8px",marginTop:8,fontSize:9,color:"#ffaaaa"}}>{err}</div>}
+            <div style={{fontSize:9,color:"#444",marginTop:8,lineHeight:1.6}}>
+              Waypoints → sample points with elevation. Tracks and routes → roads or rivers (auto-detected by name, adjustable below).
+            </div>
+          </div>
+        )}
+
+        {stage==="review"&&(
+          <div>
+            {/* Waypoints summary */}
+            {waypoints.length>0&&(
+              <div style={{background:"#0a1a0a",border:"1px solid #1a4a1a",borderRadius:6,padding:10,marginBottom:10}}>
+                <div style={{fontSize:10,color:"#27ae60",fontWeight:"bold",marginBottom:4}}>
+                  📍 {waypoints.length} Waypoint{waypoints.length!==1?"s":""} → Sample Points
+                </div>
+                <div style={{maxHeight:120,overflowY:"auto"}}>
+                  {waypoints.map(function(w,i){return(
+                    <div key={i} style={{fontSize:9,color:"#aaa",padding:"2px 0",borderBottom:"1px solid #1a2a1a",display:"flex",justifyContent:"space-between"}}>
+                      <span style={{color:"#e74c3c",fontWeight:"bold"}}>{w.id}</span>
+                      <span style={{color:"#555",fontFamily:"monospace"}}>{w.lat.toFixed(4)}, {w.lon.toFixed(4)}</span>
+                      {w.elevation&&<span style={{color:"#888"}}>{w.elevation}m</span>}
+                      <span style={{color:"#666",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{w.description}</span>
+                    </div>
+                  );})}
+                </div>
+              </div>
+            )}
+
+            {/* Tracks with toggle */}
+            {tracks.length>0&&(
+              <div style={{background:"#0a0a1e",border:"1px solid #2a2a5a",borderRadius:6,padding:10,marginBottom:10}}>
+                <div style={{fontSize:10,color:"#f0c040",fontWeight:"bold",marginBottom:8}}>
+                  🛤 {tracks.length} Track{tracks.length!==1?"s":""} — Toggle Road/River
+                </div>
+                {tracks.map(function(t,i){return(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #1a1a3a"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,color:"#eee",fontWeight:"bold"}}>{t.name}</div>
+                      <div style={{fontSize:8,color:"#555"}}>{t.points.length} points · {t.source==="rte"?"Route":"Track"}</div>
+                    </div>
+                    {/* Toggle button */}
+                    <div onClick={function(){toggleTrackType(i);}}
+                      style={{
+                        display:"flex",alignItems:"center",gap:6,cursor:"pointer",
+                        background:t.type==="river"?"#0a1a3a":"#1a0a2a",
+                        border:"1px solid "+(t.type==="river"?"#2980d9":"#c0392b"),
+                        borderRadius:20,padding:"4px 10px",userSelect:"none"
+                      }}>
+                      <span style={{fontSize:14}}>{t.type==="river"?"🌊":"🛣"}</span>
+                      <span style={{fontSize:10,color:t.type==="river"?"#2980d9":"#e07030",fontWeight:"bold"}}>
+                        {t.type==="river"?"River":"Road"}
+                      </span>
+                    </div>
+                  </div>
+                );})}
+                <div style={{fontSize:8,color:"#444",marginTop:6}}>
+                  Click any toggle to switch between Road and River. Auto-detected from track name.
+                </div>
+              </div>
+            )}
+
+            {waypoints.length===0&&tracks.length===0&&(
+              <div style={{textAlign:"center",padding:20,color:"#555",fontSize:11}}>No features to import.</div>
+            )}
+
+            {err&&<div style={{background:"#3a0a0a",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 8px",marginBottom:8,fontSize:9,color:"#ffaaaa"}}>{err}</div>}
+
+            <div style={{display:"flex",gap:8,marginTop:8}}>
+              <button onClick={handleConfirm}
+                style={{flex:1,background:"#1a4a2a",color:"#27ae60",border:"1px solid #27ae60",borderRadius:6,padding:"10px",fontSize:11,fontWeight:"bold",cursor:"pointer"}}>
+                ✓ Import {waypoints.length>0?waypoints.length+" sample"+(waypoints.length!==1?"s":""):""}
+                {waypoints.length>0&&tracks.length>0?" + ":""}
+                {tracks.length>0?tracks.length+" track"+(tracks.length!==1?"s":""):""}
+              </button>
+              <button onClick={function(){setStage("upload");setWaypoints([]);setTracks([]);setErr("");}}
+                style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"10px 14px",fontSize:11,cursor:"pointer"}}>
+                ← Back
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 var ROCK_ALIASES={
   "sh":"Shale","shale":"Shale","sl":"Shale","mudstone":"Mudstone","mud":"Mudstone",
   "ss":"Sandstone","sandstone":"Sandstone","sand":"Sandstone","arenite":"Sandstone",
@@ -3497,6 +3758,7 @@ function CSVImportPanel({onImport,onClose,rockTypes}){
   var [geoRock,setGeoRock]=useState("Shale");
   var [showCSVImport,setShowCSVImport]=useState(false);
   var [showFieldNotes,setShowFieldNotes]=useState(false);
+  var [showGPXImport,setShowGPXImport]=useState(false);
   var dragRef=useRef(null);
   var autoSaveRef=useRef(null);
   var W=size.w,H=size.h;
@@ -3852,6 +4114,31 @@ function handleClick(e){
     setTab("draw");setMode("select");
   }
 
+  function handleGPXImport(importedSamples,importedRoads,importedRivers){
+    if(importedSamples.length>0)setSamples(function(prev){return prev.concat(importedSamples);});
+    if(importedRoads.length>0)setRoads(function(prev){return prev.concat(importedRoads);});
+    if(importedRivers.length>0)setRivers(function(prev){return prev.concat(importedRivers);});
+    var allPts=importedSamples.concat(
+      importedRoads.reduce(function(a,r){return a.concat(r.points);},[] ),
+      importedRivers.reduce(function(a,r){return a.concat(r.points);},[] )
+    );
+    if(allPts.length>0){
+      var lats=allPts.map(function(p){return p.lat;}),lons=allPts.map(function(p){return p.lon;});
+      var minLat=Math.min.apply(null,lats),maxLat=Math.max.apply(null,lats);
+      var minLon=Math.min.apply(null,lons),maxLon=Math.max.apply(null,lons);
+      setCenter({lat:(minLat+maxLat)/2,lon:(minLon+maxLon)/2});
+      var span=Math.max(maxLat-minLat,maxLon-minLon,0.01);
+      setZoom(span>2?7:span>1?8:span>0.5?9:span>0.1?11:13);
+      var pad=Math.max(span*0.15,0.01);
+      fetchOSMFeatures(
+        {minLat:minLat-pad,maxLat:maxLat+pad,minLon:minLon-pad,maxLon:maxLon+pad},
+        setTowns,setRoads,setRivers
+      );
+    }
+    setShowGPXImport(false);
+    setTab("draw");setMode("select");
+  }
+
   function clearAll(){setTowns([]);setRoads([]);setRivers([]);setSamples([]);setGeoZones([]);setContourLines([]);setActiveRoadIdx(null);setActiveRiverIdx(null);setActiveGeoIdx(null);setActiveContourIdx(null);setPreviewPin(null);setSelectedFeature(null);}
 
   function placeFromCoord(ll){
@@ -4055,6 +4342,7 @@ function handleClick(e){
                 )}
                 <button onClick={function(){setShowCSVImport(true);}} style={Object.assign({},btnBase,{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"8px",fontSize:10,width:"100%",marginBottom:4})}>📥 Import CSV Field Data</button>
                 <button onClick={function(){setShowFieldNotes(true);}} style={Object.assign({},btnBase,{background:"#1a2a3a",color:"#7ab",border:"1px solid #2a4a6a",padding:"8px",fontSize:10,width:"100%",marginBottom:4})}>📋 Paste Field Notes (AI)</button>
+                <button onClick={function(){setShowGPXImport(true);}} style={Object.assign({},btnBase,{background:"#1a2a1a",color:"#27ae60",border:"1px solid #1a4a1a",padding:"8px",fontSize:10,width:"100%",marginBottom:4})}>📡 Import GPX Track</button>
                 <button onClick={clearAll} style={Object.assign({},btnBase,{background:"#3a1a1a",color:"#e74c3c",border:"1px solid #e74c3c",padding:"7px",fontSize:10,width:"100%"})}>🗑 Clear All Features</button>
                 {/* ── STRATIGRAPHIC COLUMN EDITOR ── shows when strat map type active */}
                 {mapTypes.indexOf("strat")>=0&&(
@@ -4147,8 +4435,9 @@ function handleClick(e){
 
       {showCSVImport&&(<CSVImportPanel onImport={handleCSVImport} onClose={function(){setShowCSVImport(false);}} rockTypes={ROCK_TYPES}/>)}
       {showFieldNotes&&(<FieldNotesModal onImport={function(samples,geoZones,skipped){handleCSVImport(samples,geoZones,[]);setShowFieldNotes(false);}} onClose={function(){setShowFieldNotes(false);}} projectData={{studyArea:projStudyArea,state:projState,lga:projLGA,formations:stratFormations}}/>)}
+      {showGPXImport&&(<GPXImportModal onImport={handleGPXImport} onClose={function(){setShowGPXImport(false);}}/>)}
       <div style={{background:"#0a0a1e",borderTop:"1px solid #2a2a5a",padding:"4px 14px",display:"flex",justifyContent:"space-between",flexShrink:0}}>
-        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v1.0 — Seq 12 Field Notes</span>
+        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v1.0 — Seq 13 GPX Import</span>
         <span style={{fontSize:9,color:"#333"}}>Nigeria · WGS84 · OpenStreetMap · {user?.email}</span>
       </div>
     </div>
