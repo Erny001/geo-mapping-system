@@ -14,6 +14,38 @@ const GEO_PERIODS = ["Precambrian","Cambrian","Ordovician","Silurian","Devonian"
 const CONTACT_TYPES = ["Conformable","Unconformable","Fault Contact","Gradational","Intrusive","Unknown"];
 const TOWN_TYPES = ["Settlement","Village","Town","City","LGA Headquarters","State Capital"];
 const ROAD_SURFACES = ["Paved","Unpaved","Laterite","Track"];
+const FIELD_NOTES_PROMPT = `You are parsing Nigerian geology field notes into structured JSON. The student may use shorthand, abbreviations, or free text. Extract every sample observation you can find.
+
+Return ONLY a valid JSON array — no explanation, no markdown, no backticks. Each item must have exactly these keys:
+{
+  "sample_id": string or null,
+  "lat": number or null,
+  "lon": number or null,
+  "rock": string (normalize to one of: Sandstone, Shale, Limestone, Clay, Siltstone, Marl, Gravel, Coal, Mudstone — pick closest match),
+  "formation": string or null,
+  "strike": string or null,
+  "dip": string or null,
+  "elevation": number or null,
+  "description": string,
+  "confidence": {
+    "sample_id": number between 0 and 1,
+    "lat": number between 0 and 1,
+    "lon": number between 0 and 1,
+    "rock": number between 0 and 1,
+    "formation": number between 0 and 1,
+    "strike": number between 0 and 1,
+    "dip": number between 0 and 1
+  }
+}
+
+Rules:
+- Coordinates may appear as decimal degrees (5.3241), DMS (5°19'27"N), or described as "near X town"
+- Rock abbreviations: ss=Sandstone, sh=Shale, ls=Limestone, cl=Clay, si=Siltstone
+- Formation names often follow "F:" prefix or words like "Group", "Formation", "Shale", "Sandstone" used as proper nouns
+- Strike may appear as "STR:045", "S45", "strike 045", or just a number before a slash
+- Dip may appear as "DIP:32", "D32", "dip 32", or number after a slash like "045/32"
+- If a field cannot be determined, set it to null and confidence to 0
+- If coordinates cannot be extracted, set lat/lon to null — DO NOT guess`;
 const RIVER_FLOW = ["N","NE","E","SE","S","SW","W","NW","Unknown"];
 const AUTO_SAVE_INTERVAL = 30000;
 const NIGERIA_STATES = ["Abia","Adamawa","Akwa Ibom","Anambra","Bauchi","Bayelsa","Benue","Borno","Cross River","Delta","Ebonyi","Edo","Ekiti","Enugu","FCT","Gombe","Imo","Jigawa","Kaduna","Kano","Katsina","Kebbi","Kogi","Kwara","Lagos","Nasarawa","Niger","Ogun","Ondo","Osun","Oyo","Plateau","Rivers","Sokoto","Taraba","Yobe","Zamfara"];
@@ -2831,7 +2863,7 @@ async function aiDetectColumns(headers, sampleRows){
       'description (Field description), notes (Notes/comments)\n\n'+
       'Respond ONLY with a JSON object like: {"id":0,"lat":1,"lon":2,"rock":3,"formation":-1,"strike":4,"dip":5,"elevation":6,"description":7,"notes":-1}\n'+
       'No explanation, no markdown, just the JSON object.';
-    var resp=await fetch("https://api.anthropic.com/v1/messages",{
+    var resp=await fetch("/api/anthropic",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:300,messages:[{role:"user",content:prompt}]})
@@ -2882,6 +2914,103 @@ function downloadTemplateCSV(){
   setTimeout(function(){URL.revokeObjectURL(url);},1000);
 }
 
+async function parseFieldNotes(text){
+  try{
+    var resp=await fetch("/api/anthropic",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"claude-sonnet-4-20250514",
+        max_tokens:1000,
+        system:FIELD_NOTES_PROMPT,
+        messages:[{role:"user",content:"Parse these field notes:\n\n"+text}]
+      })
+    });
+    if(!resp.ok)throw new Error("API HTTP "+resp.status);
+    var data=await resp.json();
+    var raw=(data.content||[]).map(function(b){return b.text||"";}).join("");
+    var clean=raw.replace(/```[a-z]*|```/g,"").trim();
+    // Find the JSON array in the response
+    var start=clean.indexOf("["),end=clean.lastIndexOf("]");
+    if(start===-1||end===-1)throw new Error("No JSON array in response");
+    var parsed=JSON.parse(clean.slice(start,end+1));
+    if(!Array.isArray(parsed))throw new Error("Response is not an array");
+    return{ok:true,samples:parsed};
+  }catch(e){
+    return{ok:false,error:e.message};
+  }
+}
+
+function downloadFieldCard(projectData){
+  // projectData: {studyArea, state, lga, rockTypes, formations}
+  var studyArea=projectData.studyArea||"YOUR STUDY AREA";
+  var state=projectData.state||"";
+  var formations=projectData.formations||[];
+  var exampleFormation=formations.length>0?formations[0].name||"Imo Shale":"Imo Shale";
+  var exampleRock=formations.length>0?formations[0].rock||"Shale":"Shale";
+
+  // Build the field card as a printable HTML page, then open in new tab
+  // Student prints it as A5 or half-A4
+  var html=`<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<title>GeoMap Field Notes Card</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:"Times New Roman",serif;background:#fff;color:#000;padding:16px;max-width:520px;}
+h1{font-size:14px;font-weight:bold;text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px;}
+h2{font-size:11px;font-weight:bold;margin:10px 0 4px;color:#333;text-transform:uppercase;letter-spacing:0.5px;}
+p{font-size:10px;line-height:1.6;margin-bottom:6px;}
+.example{background:#f5f5f0;border:1px solid #ccc;border-radius:4px;padding:8px 10px;margin:6px 0;font-family:monospace;font-size:10px;line-height:1.8;}
+table{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:8px;}
+th{background:#000;color:#fff;padding:3px 5px;text-align:left;}
+td{border:1px solid #ccc;padding:3px 5px;}
+.footer{margin-top:12px;border-top:1px solid #000;padding-top:6px;font-size:8px;color:#888;text-align:center;}
+@media print{body{padding:8px;}@page{size:A5 portrait;margin:8mm;}}
+</style>
+</head><body>
+<h1>GEO MAPPING SYSTEM — FIELD NOTES CARD<br/>
+<span style="font-size:11px;font-weight:normal;">${studyArea}${state?" · "+state+" State":""}</span></h1>
+
+<h2>Recommended Format (one line per sample)</h2>
+<p>Use pipe <strong>|</strong> to separate fields. Write a dash <strong>-</strong> for any field you did not measure.</p>
+
+<div class="example">
+S01 | 5.3241N 7.4112E | sandstone | F:${exampleFormation} | STR:045 DIP:30 | grey fine-grained fresh exposure<br/>
+S02 | 5.3198N 7.4089E | shale | F:Imo Shale | STR:060 DIP:22 | dark grey laminated weathered<br/>
+S03 | 5.3301N 7.4201E | limestone | F:- | STR:- DIP:- | cream crystalline near river bank
+</div>
+
+<h2>Field Format Reference</h2>
+<table>
+<tr><th>Field</th><th>Format</th><th>Example</th></tr>
+<tr><td>Sample ID</td><td>Any code</td><td>S01 or UU/GS/25/001</td></tr>
+<tr><td>Coordinates</td><td>Decimal N/E or DMS</td><td>5.3241N 7.4112E</td></tr>
+<tr><td>Rock Type</td><td>Full name or code</td><td>sandstone, ss, shale, sh, ls</td></tr>
+<tr><td>Formation</td><td>F: followed by name</td><td>F:Imo Shale or F:-</td></tr>
+<tr><td>Strike/Dip</td><td>STR:XXX DIP:XX</td><td>STR:045 DIP:30</td></tr>
+<tr><td>Description</td><td>Free text at end</td><td>dark grey, finely laminated</td></tr>
+</table>
+
+<h2>Rock Type Codes</h2>
+<table>
+<tr><th>Code</th><th>Full Name</th><th>Code</th><th>Full Name</th></tr>
+<tr><td>ss</td><td>Sandstone</td><td>cl</td><td>Clay</td></tr>
+<tr><td>sh</td><td>Shale</td><td>si</td><td>Siltstone</td></tr>
+<tr><td>ls</td><td>Limestone</td><td>ml</td><td>Marl</td></tr>
+<tr><td>md</td><td>Mudstone</td><td>gr</td><td>Gravel</td></tr>
+</table>
+
+<h2>Freeform Also Accepted</h2>
+<p>You can also paste unstructured notes. The AI will extract what it can and show confidence scores for each field. Review before confirming.</p>
+
+<div class="footer">Geo Mapping System · Nigeria Geological Survey · Print as A5 · geo-mapping-system.vercel.app</div>
+</body></html>`;
+
+  var w=window.open("","_blank");
+  w.document.write(html);
+  w.document.close();
+}
+
 var ROCK_ALIASES={
   "sh":"Shale","shale":"Shale","sl":"Shale","mudstone":"Mudstone","mud":"Mudstone",
   "ss":"Sandstone","sandstone":"Sandstone","sand":"Sandstone","arenite":"Sandstone",
@@ -2920,6 +3049,243 @@ function ColumnMappingTable({headers,mapping,onChange}){
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function FieldNotesModal({onImport,onClose,projectData}){
+  var [stage,setStage]=useState("input");
+  var [text,setText]=useState("");
+  var [parsed,setParsed]=useState([]);
+  var [err,setErr]=useState("");
+
+  function confColor(v){
+    if(v===null||v===undefined)return"#555";
+    if(v>=0.8)return"#27ae60";
+    if(v>=0.5)return"#f0c040";
+    return"#e74c3c";
+  }
+  function confLabel(v){
+    if(v===null||v===undefined)return"—";
+    return Math.round(v*100)+"%";
+  }
+
+  async function handleParse(){
+    if(!text.trim()){setErr("Paste your field notes above.");return;}
+    setErr("");setStage("parsing");
+    var result=await parseFieldNotes(text);
+    if(!result.ok){setErr("Parse failed: "+result.error+". Check your API key in Vercel environment variables.");setStage("input");return;}
+    if(!result.samples||result.samples.length===0){setErr("No samples detected. Check the notes contain coordinates and rock types.");setStage("input");return;}
+    // Auto-number any samples missing IDs
+    var numbered=result.samples.map(function(s,i){
+      return Object.assign({},s,{sample_id:s.sample_id||(s.sample_id===null?"FN-"+(i+1):s.sample_id)});
+    });
+    setParsed(numbered);setStage("review");
+  }
+
+  function updateCell(i,key,val){
+    setParsed(function(prev){return prev.map(function(s,idx){return idx===i?Object.assign({},s,{[key]:val}):s;});});
+  }
+
+  function handleConfirm(){
+    // Filter to samples with valid coordinates
+    var valid=parsed.filter(function(s){return s.lat!==null&&s.lon!==null&&!isNaN(parseFloat(s.lat))&&!isNaN(parseFloat(s.lon));});
+    var noCoord=parsed.length-valid.length;
+    if(valid.length===0){setErr("No samples have valid coordinates. Edit the Latitude and Longitude columns.");return;}
+    var importedSamples=valid.map(function(s){
+      return{
+        lat:parseFloat(s.lat),lon:parseFloat(s.lon),
+        id:s.sample_id||"FN-?",
+        rock:normalizeRock(s.rock||""),
+        formation:s.formation||"",
+        strike:s.strike||"",
+        dip:s.dip||"",
+        elevation:s.elevation!==null&&s.elevation!==undefined?String(s.elevation):"",
+        description:s.description||"",
+        notes:""
+      };
+    });
+    // Build draft geology zones same as CSV import
+    var byFormation={};
+    importedSamples.forEach(function(s){
+      if(!s.formation)return;
+      if(!byFormation[s.formation])byFormation[s.formation]=[];
+      byFormation[s.formation].push({lat:s.lat,lon:s.lon,rock:s.rock});
+    });
+    var importedGeoZones=[];
+    Object.keys(byFormation).forEach(function(form){
+      var pts=byFormation[form];if(pts.length<3)return;
+      var hull=convexHull(pts);if(hull.length<3)return;
+      var cLat=hull.reduce(function(s,p){return s+p.lat;},0)/hull.length;
+      var cLon=hull.reduce(function(s,p){return s+p.lon;},0)/hull.length;
+      var expanded=hull.map(function(p){return{lat:cLat+(p.lat-cLat)*1.03,lon:cLon+(p.lon-cLon)*1.03};});
+      importedGeoZones.push({rock:pts[0].rock,formation:form,period:"Unknown",contact:"Unknown",strike:"",dip:"",points:expanded});
+    });
+    onImport(importedSamples,importedGeoZones,noCoord);
+  }
+
+  var EDIT_FIELDS=["sample_id","lat","lon","rock","formation","strike","dip","elevation","description"];
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.88)",zIndex:1001,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#12122e",border:"1px solid #2a2a5a",borderRadius:12,padding:20,width:740,maxHeight:"88vh",overflowY:"auto",fontFamily:"sans-serif"}}>
+
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:"bold",color:"#f0c040"}}>📋 Paste Field Notes</div>
+            <div style={{fontSize:10,color:"#555",marginTop:2}}>
+              {stage==="input"&&"Paste your handwritten or typed field notes — any format accepted"}
+              {stage==="parsing"&&"AI is reading your field notes…"}
+              {stage==="review"&&"Review the extracted data. Edit any cell before confirming."}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#555",fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+
+        {/* Field card download */}
+        {stage==="input"&&(
+          <div style={{background:"#0a0a1e",border:"1px solid #1a3a5a",borderRadius:6,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,color:"#4a9adf",fontWeight:"bold"}}>Need a field notes card?</div>
+              <div style={{fontSize:9,color:"#555",marginTop:2}}>Download the recommended format reference — print and carry to the field</div>
+            </div>
+            <button onClick={function(){downloadFieldCard(projectData);}}
+              style={{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",borderRadius:5,padding:"5px 10px",fontSize:9,cursor:"pointer",fontWeight:"bold",whiteSpace:"nowrap"}}>
+              📄 Field Card
+            </button>
+          </div>
+        )}
+
+        {/* Input stage */}
+        {stage==="input"&&(
+          <div>
+            <div style={{fontSize:10,color:"#7ab",marginBottom:4}}>
+              Recommended: <code style={{color:"#f0c040",fontSize:9}}>S01 | 5.3241N 7.4112E | sandstone | F:Imo Shale | STR:045 DIP:30 | grey fine-grained</code>
+            </div>
+            <textarea
+              value={text}
+              onChange={function(e){setText(e.target.value);setErr("");}}
+              placeholder={"Paste field notes here — one sample per line recommended\n\nExamples:\nS01 | 5.3241N 7.4112E | sandstone | F:Imo Shale | STR:045 DIP:30 | grey fine-grained fresh\nS02 | 5.3198N 7.4089E | shale | F:Imo | STR:060 DIP:22 | dark grey laminated\n\nFreeform also works:\nStation 3 at latitude 5.3301 longitude 7.4201 - limestone, cream coloured, crystalline texture, no structural data measured"}
+              rows={10}
+              style={{width:"100%",background:"#0a0a1e",color:"#eee",border:"1px solid #3a5a7a",borderRadius:6,padding:"10px",fontSize:11,fontFamily:"monospace",resize:"vertical",lineHeight:1.7,boxSizing:"border-box"}}
+            />
+            {err&&<div style={{background:"#3a0a0a",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 8px",marginTop:6,fontSize:9,color:"#ffaaaa"}}>{err}</div>}
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              <button onClick={handleParse}
+                style={{flex:1,background:"#f0c040",color:"#000",border:"none",borderRadius:6,padding:"10px",fontSize:12,fontWeight:"bold",cursor:"pointer"}}>
+                🤖 Parse with AI
+              </button>
+              <button onClick={onClose}
+                style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"10px 14px",fontSize:11,cursor:"pointer"}}>
+                Cancel
+              </button>
+            </div>
+            <div style={{fontSize:9,color:"#444",marginTop:8,lineHeight:1.6}}>
+              AI reads your notes and extracts coordinates, rock types, formations, and structural data. You review before anything is placed on the map.
+            </div>
+          </div>
+        )}
+
+        {/* Parsing stage */}
+        {stage==="parsing"&&(
+          <div style={{textAlign:"center",padding:32}}>
+            <div style={{fontSize:28,marginBottom:10}}>🤖</div>
+            <div style={{fontSize:13,color:"#f0c040",fontWeight:"bold",marginBottom:6}}>Reading Field Notes…</div>
+            <div style={{fontSize:10,color:"#555"}}>Extracting coordinates, rock types, formations, and structural data</div>
+            <div style={{marginTop:14,height:4,background:"#1a1a3a",borderRadius:2,overflow:"hidden"}}>
+              <div style={{height:"100%",width:"70%",background:"#f0c040",borderRadius:2,animation:"pulse 1s infinite"}}/>
+            </div>
+          </div>
+        )}
+
+        {/* Review stage */}
+        {stage==="review"&&(
+          <div>
+            <div style={{fontSize:10,color:"#27ae60",marginBottom:8}}>
+              ✓ {parsed.length} sample{parsed.length!==1?"s":""} detected. Edit any cell — green = high confidence, yellow = uncertain, red = missing/guessed.
+            </div>
+
+            {/* Scrollable table */}
+            <div style={{overflowX:"auto",marginBottom:10,border:"1px solid #2a2a5a",borderRadius:6}}>
+              <table style={{borderCollapse:"collapse",width:"100%",fontSize:9,minWidth:620}}>
+                <thead>
+                  <tr style={{background:"#1a1a3a"}}>
+                    <th style={{padding:"5px 6px",textAlign:"left",color:"#7ab",whiteSpace:"nowrap",borderBottom:"1px solid #2a2a5a"}}>#</th>
+                    {["Sample ID","Lat","Lon","Rock","Formation","Strike","Dip","Elev (m)","Description"].map(function(h){
+                      return <th key={h} style={{padding:"5px 6px",textAlign:"left",color:"#7ab",whiteSpace:"nowrap",borderBottom:"1px solid #2a2a5a"}}>{h}</th>;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.map(function(s,i){
+                    var conf=s.confidence||{};
+                    var fieldKeys=["sample_id","lat","lon","rock","formation","strike","dip","elevation","description"];
+                    var confKeys=["sample_id","lat","lon","rock","formation","strike","dip","elevation","description"];
+                    return(
+                      <tr key={i} style={{borderBottom:"1px solid #1a1a3a",background:i%2===0?"#0d0d20":"#0a0a1a"}}>
+                        <td style={{padding:"3px 6px",color:"#555",verticalAlign:"middle"}}>{i+1}</td>
+                        {fieldKeys.map(function(key,ki){
+                          var cv=conf[confKeys[ki]];
+                          var cellColor=confColor(cv);
+                          var isCoord=key==="lat"||key==="lon";
+                          var val=s[key];
+                          var displayVal=val===null||val===undefined?"":String(val);
+                          return(
+                            <td key={key} style={{padding:"2px 4px",verticalAlign:"middle"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:3}}>
+                                <input
+                                  value={displayVal}
+                                  onChange={function(e){updateCell(i,key,e.target.value);}}
+                                  style={{
+                                    background:"transparent",
+                                    color:displayVal?"#eee":"#555",
+                                    border:"1px solid "+(displayVal?cellColor:"#333"),
+                                    borderRadius:3,padding:"2px 4px",
+                                    fontSize:9,
+                                    width:isCoord?72:key==="description"?140:key==="sample_id"?80:60,
+                                    fontFamily:isCoord?"monospace":"inherit"
+                                  }}
+                                  placeholder={val===null?"—":""}
+                                />
+                                {cv!==undefined&&cv!==null&&(
+                                  <span style={{fontSize:7,color:cellColor,whiteSpace:"nowrap",opacity:0.8}}>
+                                    {confLabel(cv)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Samples with no coords warning */}
+            {parsed.filter(function(s){return !s.lat||!s.lon;}).length>0&&(
+              <div style={{background:"#2a1a0a",border:"1px solid #f0c040",borderRadius:6,padding:"6px 10px",marginBottom:8,fontSize:9,color:"#f0c040"}}>
+                ⚠ {parsed.filter(function(s){return !s.lat||!s.lon;}).length} sample{parsed.filter(function(s){return !s.lat||!s.lon;}).length!==1?"s":""} have no coordinates — fill them in or they will be skipped.
+              </div>
+            )}
+
+            {err&&<div style={{background:"#3a0a0a",border:"1px solid #e74c3c",borderRadius:6,padding:"6px 8px",marginBottom:8,fontSize:9,color:"#ffaaaa"}}>{err}</div>}
+
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={handleConfirm}
+                style={{flex:1,background:"#1a4a2a",color:"#27ae60",border:"1px solid #27ae60",borderRadius:6,padding:"10px",fontSize:11,fontWeight:"bold",cursor:"pointer"}}>
+                ✓ Confirm &amp; Place on Map
+              </button>
+              <button onClick={function(){setStage("input");}}
+                style={{background:"#1a1a3a",color:"#888",border:"1px solid #3a3a6a",borderRadius:6,padding:"10px 14px",fontSize:11,cursor:"pointer"}}>
+                ← Back
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -3130,6 +3496,7 @@ function CSVImportPanel({onImport,onClose,rockTypes}){
   var [sampleFormErrs,setSampleFormErrs]=useState({});
   var [geoRock,setGeoRock]=useState("Shale");
   var [showCSVImport,setShowCSVImport]=useState(false);
+  var [showFieldNotes,setShowFieldNotes]=useState(false);
   var dragRef=useRef(null);
   var autoSaveRef=useRef(null);
   var W=size.w,H=size.h;
@@ -3687,6 +4054,7 @@ function handleClick(e){
                   </div>
                 )}
                 <button onClick={function(){setShowCSVImport(true);}} style={Object.assign({},btnBase,{background:"#1a3a5a",color:"#4a9adf",border:"1px solid #2a5a8a",padding:"8px",fontSize:10,width:"100%",marginBottom:4})}>📥 Import CSV Field Data</button>
+                <button onClick={function(){setShowFieldNotes(true);}} style={Object.assign({},btnBase,{background:"#1a2a3a",color:"#7ab",border:"1px solid #2a4a6a",padding:"8px",fontSize:10,width:"100%",marginBottom:4})}>📋 Paste Field Notes (AI)</button>
                 <button onClick={clearAll} style={Object.assign({},btnBase,{background:"#3a1a1a",color:"#e74c3c",border:"1px solid #e74c3c",padding:"7px",fontSize:10,width:"100%"})}>🗑 Clear All Features</button>
                 {/* ── STRATIGRAPHIC COLUMN EDITOR ── shows when strat map type active */}
                 {mapTypes.indexOf("strat")>=0&&(
@@ -3778,8 +4146,9 @@ function handleClick(e){
       </div>
 
       {showCSVImport&&(<CSVImportPanel onImport={handleCSVImport} onClose={function(){setShowCSVImport(false);}} rockTypes={ROCK_TYPES}/>)}
+      {showFieldNotes&&(<FieldNotesModal onImport={function(samples,geoZones,skipped){handleCSVImport(samples,geoZones,[]);setShowFieldNotes(false);}} onClose={function(){setShowFieldNotes(false);}} projectData={{studyArea:projStudyArea,state:projState,lga:projLGA,formations:stratFormations}}/>)}
       <div style={{background:"#0a0a1e",borderTop:"1px solid #2a2a5a",padding:"4px 14px",display:"flex",justifyContent:"space-between",flexShrink:0}}>
-        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v1.0 — Seq 11 CSV Import</span>
+        <span style={{fontSize:9,color:"#333"}}>Geo Mapping System v1.0 — Seq 12 Field Notes</span>
         <span style={{fontSize:9,color:"#333"}}>Nigeria · WGS84 · OpenStreetMap · {user?.email}</span>
       </div>
     </div>
