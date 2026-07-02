@@ -661,8 +661,8 @@ function renderMap(type, data, meta, exportDPI, pageSize){
   var bboxMinLon = featMinLon - padLon;
   var bboxMaxLon = featMaxLon + padLon;
 
-  var exportCenterLat = (bboxMinLat+bboxMaxLat)/2;
-  var exportCenterLon = (bboxMinLon+bboxMaxLon)/2;
+  var exportCenterLat = (featMinLat+featMaxLat)/2;
+  var exportCenterLon = (featMinLon+featMaxLon)/2;
 
   function computeFitZoom(minLat,maxLat,minLon,maxLon,pixW,pixH){
     for(var z=18;z>=1;z--){
@@ -671,11 +671,11 @@ function renderMap(type, data, meta, exportDPI, pageSize){
       function lx(lo){return ws*(lo+180)/360;}
       var pw=lx(maxLon)-lx(minLon);
       var ph=ly(minLat)-ly(maxLat);
-      if(pw<=pixW*0.88&&ph<=pixH*0.88)return z;
+      if(pw<=pixW&&ph<=pixH)return z;
     }
     return 1;
   }
-  var exportZoom = computeFitZoom(bboxMinLat,bboxMaxLat,bboxMinLon,bboxMaxLon,MAP_W,MAP_H);
+  var exportZoom = computeFitZoom(featMinLat,featMaxLat,featMinLon,featMaxLon,MAP_W,MAP_H);
 
   // A–B line through feature centroid, west→east of bbox
   var abLat     = exportCenterLat;
@@ -1383,7 +1383,6 @@ function drawAll(){
   drawMapFrame();        // white fill for entire map frame
   drawTiles();           // clipped to study boundary (0% geo, 18% sample)
   if(mapType==="geo")drawGeoZones();
-  drawStudyBoundary();   // dashed boundary box
   drawRoads();
   drawRivers();
   drawTowns();
@@ -2133,13 +2132,6 @@ function drawAll(){
   ctx.textAlign="right";ctx.fillText("A",MAP_X-6,ptA.y+5);
   ctx.textAlign="left";ctx.fillText("B",MAP_X+MAP_W+6,ptB.y+5);
   ctx.textAlign="left";
-
-  // ── Study boundary ────────────────────────────────────────────────────────
-  if(featMinLat!==featMaxLat){
-    ctx.save();ctx.beginPath();ctx.rect(MAP_X,MAP_Y,MAP_W,MAP_H);ctx.clip();
-    ctx.strokeStyle="#555";ctx.lineWidth=1.4;ctx.setLineDash([8,4]);
-    ctx.strokeRect(sbX,sbY,sbW,sbH);ctx.setLineDash([]);ctx.restore();
-  }
 
   // ── Roads ─────────────────────────────────────────────────────────────────
   ctx.save();ctx.beginPath();ctx.rect(sbX,sbY,sbW,sbH);ctx.clip();
